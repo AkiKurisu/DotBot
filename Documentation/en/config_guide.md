@@ -1,0 +1,706 @@
+# DotBot Configuration Guide
+
+This document describes DotBot's configuration system, including global configuration, workspace configuration, and security settings.
+
+## Configuration File Locations
+
+DotBot supports two levels of configuration: **Global configuration** and **Workspace configuration**.
+
+| Config File | Path | Purpose |
+|-------------|------|---------|
+| Global config | `~/.bot/appsettings.json` | Default API Key, model, and other global settings |
+| Workspace config | `<workspace>/.bot/appsettings.json` | Workspace-specific override configuration |
+
+### Configuration Merge Rules
+
+- **Global config as baseline**: Provides default values
+- **Workspace config overrides global config**: Values set in workspace take higher priority
+- Items not set in workspace retain global config values
+
+This design allows sensitive information like API Keys to be placed in global config, avoiding leaks to the workspace (e.g., Git repositories).
+
+### Usage Example
+
+**Global config** (`~/.bot/appsettings.json`): Store default API Key and model
+
+```json
+{
+    "ApiKey": "sk-your-default-api-key",
+    "Model": "gpt-4o-mini",
+    "EndPoint": "https://api.openai.com/v1"
+}
+```
+
+**Workspace config** (`<workspace>/.bot/appsettings.json`): Override model and feature settings without repeating API Key
+
+```json
+{
+    "Model": "deepseek-chat",
+    "EndPoint": "https://api.deepseek.com/v1",
+    "SystemInstructions": "You are a project assistant focused on code analysis.",
+    "QQBot": {
+        "Enabled": true,
+        "Port": 6700,
+        "AdminUsers": [123456789]
+    }
+}
+```
+
+In this case, DotBot will use the `ApiKey` from global config, but the `Model`, `EndPoint`, and `QQBot` settings from workspace config.
+
+---
+
+## Basic Configuration
+
+| Config Item | Description | Default |
+|-------------|-------------|---------|
+| `ApiKey` | LLM API Key (OpenAI-compatible format) | empty |
+| `Model` | Model name to use | `gpt-4o-mini` |
+| `EndPoint` | API endpoint address | `https://api.openai.com/v1` |
+| `SystemInstructions` | System prompt | Built-in default prompt |
+| `MaxToolCallRounds` | Main Agent max tool call rounds | `30` |
+| `SubagentMaxToolCallRounds` | SubAgent max tool call rounds | `15` |
+| `CompactSessions` | Whether to compress sessions when saving (remove tool call messages) | `true` |
+
+---
+
+## Security Configuration
+
+### File Access Blacklist
+
+Configure forbidden paths via `Security.BlacklistedPaths`. The blacklist is **globally effective**, blocking access in both CLI mode and QQ Bot mode.
+
+```json
+{
+    "Security": {
+        "BlacklistedPaths": [
+            "~/.ssh",
+            "/etc/shadow",
+            "/etc/passwd",
+            "C:\\Windows\\System32"
+        ]
+    }
+}
+```
+
+#### Blacklist Behavior
+
+- **File operations**: `read_file`, `write_file`, `edit_file`, `list_directory` operations on blacklisted paths are directly rejected
+- **Shell commands**: Shell commands referencing blacklisted paths are rejected
+- **Priority**: Blacklist check takes priority over workspace boundary check; even paths within the workspace will be blocked if blacklisted
+- **Path matching**: Supports absolute paths and `~` expansion; checks whether a path is a sub-path of a blacklisted path
+
+#### Recommended Blacklist Configuration
+
+```json
+{
+    "Security": {
+        "BlacklistedPaths": [
+            "~/.ssh",
+            "~/.gnupg",
+            "~/.aws",
+            "/etc/shadow",
+            "/etc/sudoers"
+        ]
+    }
+}
+```
+
+### Shell Command Path Detection & Workspace Boundary
+
+DotBot performs **cross-platform path static analysis** (`ShellCommandInspector`) on Shell command strings before execution, covering the following path forms:
+
+**Unix Paths**
+- Absolute paths: `/etc/passwd`, `/var/log/syslog`
+- Home directory paths: `~/.ssh/config`
+- Environment variable home directory: `$HOME/.config`, `${HOME}/.gitconfig`
+- Safe device whitelist (does not trigger detection): `/dev/null`, `/dev/stdout`, etc.
+
+**Windows Paths**
+- Drive letter absolute paths: `C:\`, `D:\Users\Aki\file.txt`
+- Environment variable paths: `%USERPROFILE%\Documents`, `%APPDATA%\config`
+- UNC paths: `\\server\share\file`
+- Safe device whitelist: `NUL`, `CON`, `PRN`, `AUX`
+
+**File Tool Path Resolution**
+
+`FileTools` also expands `~`, `$HOME`, `${HOME}`, and `%ENV%` variables to actual paths when resolving file paths, ensuring workspace boundary checks work for all path forms.
+
+**Trigger Rules**
+
+If any path referenced in a command resolves to outside the workspace:
+- When `Tools.Shell.RequireApprovalOutsideWorkspace = false`: Execution is directly rejected, with the detected path list provided
+- When `Tools.Shell.RequireApprovalOutsideWorkspace = true`: An approval request is sent to the current interaction source (console/QQ), execution proceeds only after approval
+
+Note: Even if the working directory (cwd) is within the workspace, if the command string contains paths outside the workspace, the above rules still apply.
+
+Examples:
+- `ls /etc` -> Triggers (Unix absolute path, outside workspace)
+- `dir C:\` -> Triggers (Windows drive path, outside workspace)
+- `cat ~/.ssh/id_rsa` -> Triggers (home directory path + recommended to add to blacklist)
+- `type %USERPROFILE%\Desktop\secret.txt` -> Triggers (Windows environment variable path)
+- `grep foo ${HOME}/.bashrc` -> Triggers (Unix environment variable path)
+- `ls ./src` -> Normal execution within workspace
+- `echo test > /dev/null` -> Safe device whitelist, does not trigger
+
+### Tool Security Configuration
+
+| Config Item | Description | Default |
+|-------------|-------------|---------|
+| `Tools.File.RequireApprovalOutsideWorkspace` | Whether file operations outside workspace require approval (`false` = direct reject) | `true` |
+| `Tools.File.MaxFileSize` | Maximum readable file size (bytes) | `10485760` (10MB) |
+| `Tools.Shell.RequireApprovalOutsideWorkspace` | Whether Shell commands outside workspace require approval (`false` = direct reject) | `true` |
+| `Tools.Shell.Timeout` | Shell command timeout (seconds) | `60` |
+| `Tools.Shell.MaxOutputLength` | Shell command max output length (characters) | `10000` |
+| `Tools.Web.MaxChars` | Web scraping max characters | `50000` |
+| `Tools.Web.Timeout` | Web request timeout (seconds) | `30` |
+| `Tools.Web.SearchMaxResults` | Web search default result count (1-10) | `5` |
+| `Tools.Web.SearchProvider` | Search engine provider: `Bing` (default, globally available), `Exa` (AI-optimized, free MCP interface), or `DuckDuckGo` (may be blocked by CAPTCHA) | `Bing` |
+
+---
+
+## QQ Bot Configuration
+
+For detailed QQ Bot configuration, see [QQ Bot Guide](./qq_bot_guide.md).
+
+Quick reference:
+
+| Config Item | Description | Default |
+|-------------|-------------|---------|
+| `QQBot.Enabled` | Enable QQ bot mode | `false` |
+| `QQBot.Host` | WebSocket listen address | `0.0.0.0` |
+| `QQBot.Port` | WebSocket listen port | `6700` |
+| `QQBot.AccessToken` | Auth token (must match NapCat) | empty |
+| `QQBot.AdminUsers` | Admin QQ number list | `[]` |
+| `QQBot.WhitelistedUsers` | Whitelisted user QQ number list | `[]` |
+| `QQBot.WhitelistedGroups` | Whitelisted group number list | `[]` |
+| `QQBot.ApprovalTimeoutSeconds` | Operation approval timeout (seconds) | `60` |
+
+---
+
+## WeCom Bot Configuration
+
+For detailed WeCom Bot configuration, see [WeCom Guide](./wecom_guide.md).
+
+Quick reference:
+
+| Config Item | Description | Default |
+|-------------|-------------|---------|
+| `WeComBot.Enabled` | Enable WeCom bot mode | `false` |
+| `WeComBot.Host` | HTTP service listen address | `0.0.0.0` |
+| `WeComBot.Port` | HTTP service listen port | `9000` |
+| `WeComBot.AdminUsers` | Admin user ID list (WeCom UserId) | `[]` |
+| `WeComBot.WhitelistedUsers` | Whitelisted user ID list (WeCom UserId) | `[]` |
+| `WeComBot.WhitelistedChats` | Whitelisted chat ID list (WeCom ChatId) | `[]` |
+| `WeComBot.ApprovalTimeoutSeconds` | Operation approval timeout (seconds) | `60` |
+| `WeComBot.Robots` | Bot configuration list (Path/Token/AesKey) | `[]` |
+
+**Note**: QQ Bot, WeCom Bot, and API mode cannot be enabled simultaneously. Priority order: QQ Bot > WeCom Bot > API > CLI.
+
+**Permission Notes**:
+- `AdminUsers`: Has all permissions; workspace write operations require approval
+- `WhitelistedUsers`: Can only perform read operations (file reading, Web search, etc.)
+- `WhitelistedChats`: All users in that chat automatically get whitelisted permissions
+- Users not in any of the above lists cannot use Agent features
+
+**Approval Mechanism**:
+- When admins perform workspace write operations, they receive an approval request in the WeCom chat
+- Reply "approve" or "allow" to approve the operation; reply "approve all" to skip future approval for similar operations in the session
+- Reply "reject" or don't reply (timeout) to reject the operation
+- Approval timeout can be configured via `ApprovalTimeoutSeconds`
+
+---
+
+## Session Compaction
+
+`CompactSessions` controls whether tool call-related messages are automatically removed when saving sessions, to reduce session file size and avoid redundant data on load.
+
+**Compaction behavior**:
+- Removes all `role: tool` messages (tool return results)
+- Removes `FunctionCallContent` from assistant messages (tool call instructions)
+- If an assistant message has no other content after removing FunctionCallContent, the entire message is removed
+- Preserves user messages and assistant text replies
+
+**When to disable**: If you need to retain the complete tool call history in session files (e.g., for debugging), set `"CompactSessions": false`.
+
+---
+
+## Token Usage Statistics
+
+DotBot automatically extracts token usage information from LLM responses and displays it.
+
+- **CLI mode**: Shows `Tokens: X in / Y out / Z total` after each reply in the console
+- **QQ mode**: Appends `[Tokens: X in / Y out / Z total]` at the end of each reply
+
+No additional configuration needed. Token statistics depend on the LLM provider returning `UsageContent` in streaming responses; some providers may not support this.
+
+---
+
+## Heartbeat Service
+
+Heartbeat periodically reads the `HEARTBEAT.md` file from the .bot directory. If there is executable content, it is automatically submitted to the Agent for processing. Suitable for periodic inspections, status monitoring, etc.
+
+| Config Item | Description | Default |
+|-------------|-------------|---------|
+| `Heartbeat.Enabled` | Enable heartbeat service | `false` |
+| `Heartbeat.IntervalSeconds` | Check interval (seconds) | `1800` (30 minutes) |
+| `Heartbeat.NotifyAdmin` | In QQ mode, whether to privately notify admins with results | `false` |
+
+### Heartbeat Configuration Example
+
+```json
+{
+    "Heartbeat": {
+        "Enabled": true,
+        "IntervalSeconds": 1800,
+        "NotifyAdmin": false
+    }
+}
+```
+
+**Console output**: During Heartbeat execution, tool calls and results are output to the console in the format `[Heartbeat] tool_name args` / `[Heartbeat] Result: ...`, convenient for debugging.
+
+**Admin notification**: In QQ mode with `"NotifyAdmin": true`, Heartbeat results are automatically sent as private messages to all `AdminUsers`.
+
+### Heartbeat Usage
+
+1. Create a `HEARTBEAT.md` file in the .bot directory
+2. Write tasks to be executed periodically:
+
+```markdown
+# Heartbeat Tasks
+
+## Active Tasks
+- Check if the project has new GitHub issues and summarize
+- Check log files for anomalies
+```
+
+3. Start DotBot (auto-runs in QQ mode; manually trigger in CLI mode via `/heartbeat trigger`)
+4. The Agent will automatically execute tasks based on HEARTBEAT.md content. If the file is empty or contains only titles/comments, it will be skipped
+5. Heartbeat has independent Session management but shares long-term memory with the main Agent.
+
+### Manual Trigger
+
+- **CLI mode**: Enter `/heartbeat trigger`
+- **QQ mode**: Send `/heartbeat trigger`
+
+---
+
+## WeCom Integration
+
+DotBot provides two WeCom integration capabilities:
+
+| Capability | Config Section | Description |
+|-----------|----------------|-------------|
+| WeCom Push | `WeCom` | Send notifications to WeCom groups via group bot Webhook |
+| WeCom Bot | `WeComBot` | Run as an independent mode, receive and respond to WeCom messages |
+
+### Quick Configuration
+
+**WeCom Push** (Webhook notifications):
+
+```json
+{
+    "WeCom": {
+        "Enabled": true,
+        "WebhookUrl": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY"
+    }
+}
+```
+
+**WeCom Bot mode** (bidirectional interaction):
+
+```json
+{
+    "WeComBot": {
+        "Enabled": true,
+        "Port": 9000,
+        "Host": "0.0.0.0",
+        "AdminUsers": ["zhangsan", "lisi"],
+        "WhitelistedUsers": ["wangwu"],
+        "WhitelistedChats": ["wrxxxxxxxx"],
+        "ApprovalTimeoutSeconds": 60,
+        "Robots": [
+            {
+                "Path": "/dotbot",
+                "Token": "your_token",
+                "AesKey": "your_aeskey"
+            }
+        ]
+    }
+}
+```
+
+For detailed configuration, usage, deployment guide, and troubleshooting, see [WeCom Guide](./wecom_guide.md).
+
+---
+
+## API Mode Configuration
+
+API mode exposes DotBot as an OpenAI-compatible HTTP service, allowing external applications to call it directly using standard OpenAI SDKs. Based on the [Microsoft.Agents.AI.Hosting.OpenAI](https://github.com/microsoft/agent-framework) official framework.
+
+For detailed usage guide, see [API Mode Guide](./api_guide.md).
+
+Quick reference:
+
+| Config Item | Description | Default |
+|-------------|-------------|---------|
+| `Api.Enabled` | Enable API mode | `false` |
+| `Api.Host` | HTTP service listen address | `0.0.0.0` |
+| `Api.Port` | HTTP service listen port | `8080` |
+| `Api.ApiKey` | API access key (Bearer Token), no verification when empty | empty |
+| `Api.AutoApprove` | Whether to auto-approve all file/Shell operations (overridden by ApprovalMode) | `true` |
+| `Api.ApprovalMode` | Approval mode: `auto`/`reject`/`interactive` | empty |
+| `Api.ApprovalTimeoutSeconds` | Interactive mode approval timeout (seconds) | `120` |
+| `Api.EnabledTools` | Enabled tools list, enables all when empty | `[]` |
+
+### API Mode Configuration Example
+
+**Basic config** (all tools enabled, no authentication):
+
+```json
+{
+    "Api": {
+        "Enabled": true,
+        "Port": 8080,
+        "AutoApprove": true
+    }
+}
+```
+
+**Search tools only** (for search service scenarios):
+
+```json
+{
+    "Api": {
+        "Enabled": true,
+        "Port": 8080,
+        "ApiKey": "your-api-access-key",
+        "AutoApprove": false,
+        "EnabledTools": ["web_search", "web_fetch"]
+    }
+}
+```
+
+### Tool Filtering
+
+`EnabledTools` supports filtering both built-in tools and MCP server-registered tools. Enables all tools when set to an empty array or not set.
+
+Available built-in tool names: `spawn_subagent`, `read_file`, `write_file`, `edit_file`, `grep_files`, `find_files`, `exec`, `web_search`, `web_fetch`, `cron`, `wecom_notify`.
+
+### Authentication
+
+When `Api.ApiKey` is configured with a non-empty value, all API requests must carry a Bearer Token:
+
+```
+Authorization: Bearer your-api-access-key
+```
+
+### Approval Mechanism
+
+API mode supports three approval modes via `ApprovalMode` (overrides `AutoApprove` when set):
+
+- **`auto`**: All file operations and Shell commands auto-approved (equivalent to `AutoApprove: true`)
+- **`reject`**: All file operations and Shell commands auto-rejected (equivalent to `AutoApprove: false`)
+- **`interactive`**: Human-in-the-Loop mode, sensitive operations pause waiting for API client approval via `/v1/approvals` endpoint
+
+`ApprovalTimeoutSeconds` controls the approval timeout in interactive mode (default 120 seconds); auto-rejected if not approved within the timeout.
+
+For detailed explanation and Python examples, see [API Mode Guide](./api_guide.md#human-in-the-loop-interactive-approval).
+
+---
+
+## Cron Scheduled Task Service
+
+Cron is a scheduled task scheduling system supporting one-time and recurring tasks. Tasks are persisted to JSON files and automatically restored after restart.
+
+| Config Item | Description | Default |
+|-------------|-------------|---------|
+| `Cron.Enabled` | Enable scheduled tasks | `false` |
+| `Cron.StorePath` | Task storage file path (relative to `.bot/`) | `cron/jobs.json` |
+
+### Cron Configuration Example
+
+```json
+{
+    "Cron": {
+        "Enabled": true,
+        "StorePath": "cron/jobs.json"
+    }
+}
+```
+
+### Schedule Types
+
+| Type | Description | Parameter |
+|------|-------------|-----------|
+| `at` | One-time task, auto-deleted after execution at specified time | `AtMs` (Unix millisecond timestamp) |
+| `every` | Recurring task, repeats at fixed intervals | `EveryMs` (interval in milliseconds) |
+
+### Delivery Channels
+
+Cron tasks support multiple delivery channels (set `deliver: true` when creating the task):
+
+| Channel Parameter | Description | Prerequisite |
+|-------------------|-------------|--------------|
+| `channel: "<group_number>"` | Deliver to specified QQ group | QQ Bot mode |
+| `to: "<qq_number>"` | Deliver to specified QQ private chat | QQ Bot mode |
+| `channel: "wecom"` | Deliver to WeCom group | WeCom config enabled |
+
+### Agent Self-Service Task Creation
+
+When Cron is enabled, the Agent can create scheduled tasks via the `Cron` tool. For example, saying "remind me to drink water every hour" in conversation will trigger:
+
+```
+Cron(action: "add", message: "Remind user to drink water", everySeconds: 3600, name: "Drink water reminder")
+```
+
+### Command Line Management
+
+**CLI mode**:
+- `/cron list` - View all tasks
+- `/cron remove <jobId>` - Delete a task
+- `/cron enable <jobId>` - Enable a task
+- `/cron disable <jobId>` - Disable a task
+
+**QQ mode**:
+- `/cron list` - View all tasks
+- `/cron remove <jobId>` - Delete a task
+
+---
+
+## MCP Service Integration
+
+DotBot supports connecting external tool services via [Model Context Protocol (MCP)](https://modelcontextprotocol.io/). MCP is an open protocol for standardizing the integration between AI applications and external tools/data sources.
+
+Once configured, tools provided by MCP servers are automatically registered with the Agent and used alongside built-in tools (files, Shell, Web, etc.).
+
+### Configuration
+
+`McpServers` is an array where each element defines an MCP server connection:
+
+| Config Item | Description | Default |
+|-------------|-------------|---------|
+| `Name` | Server name (for logging and tool tracing) | empty |
+| `Enabled` | Whether to enable this server | `true` |
+| `Transport` | Transport method: `stdio` (local process) or `http` (HTTP/SSE) | `stdio` |
+| `Command` | Start command (stdio only) | empty |
+| `Arguments` | Command arguments list (stdio only) | `[]` |
+| `EnvironmentVariables` | Environment variables (stdio only) | `{}` |
+| `Url` | Server address (http only), e.g., `https://mcp.exa.ai/mcp` | empty |
+| `Headers` | Additional HTTP request headers (http only) | `{}` |
+
+### Transport Methods
+
+**HTTP/SSE Transport**: Connect to remote MCP servers, suitable for cloud MCP services (e.g., Exa).
+
+```json
+{
+    "McpServers": [
+        {
+            "Name": "exa",
+            "Transport": "http",
+            "Url": "https://mcp.exa.ai/mcp"
+        }
+    ]
+}
+```
+
+**Stdio Transport**: Start a local process and communicate via stdin/stdout, suitable for local MCP servers.
+
+```json
+{
+    "McpServers": [
+        {
+            "Name": "filesystem",
+            "Transport": "stdio",
+            "Command": "npx",
+            "Arguments": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/dir"]
+        }
+    ]
+}
+```
+
+### MCP Servers with Authentication
+
+Some MCP servers require API Key authentication, which can be passed via `Headers` (HTTP) or `EnvironmentVariables` (stdio):
+
+```json
+{
+    "McpServers": [
+        {
+            "Name": "my-service",
+            "Transport": "http",
+            "Url": "https://example.com/mcp",
+            "Headers": {
+                "Authorization": "Bearer your-api-key"
+            }
+        },
+        {
+            "Name": "local-tool",
+            "Transport": "stdio",
+            "Command": "my-mcp-server",
+            "EnvironmentVariables": {
+                "API_KEY": "your-api-key"
+            }
+        }
+    ]
+}
+```
+
+### Multi-Server Configuration
+
+Multiple MCP servers can be connected simultaneously; all server tools are merged and registered with the Agent:
+
+```json
+{
+    "McpServers": [
+        {
+            "Name": "exa",
+            "Transport": "http",
+            "Url": "https://mcp.exa.ai/mcp"
+        },
+        {
+            "Name": "github",
+            "Transport": "stdio",
+            "Command": "npx",
+            "Arguments": ["-y", "@modelcontextprotocol/server-github"],
+            "EnvironmentVariables": {
+                "GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_xxxxx"
+            }
+        }
+    ]
+}
+```
+
+### Disabling a Single Server
+
+Set `Enabled: false` to temporarily disable an MCP server without deleting the configuration:
+
+```json
+{
+    "McpServers": [
+        {
+            "Name": "exa",
+            "Enabled": false,
+            "Transport": "http",
+            "Url": "https://mcp.exa.ai/mcp"
+        }
+    ]
+}
+```
+
+### Startup Behavior
+
+- MCP servers connect automatically on application startup; after successful connection, the console outputs the number of discovered tools
+- Connection failures do not prevent application startup; failed servers output error logs
+- All MCP connections are automatically disconnected on application exit
+
+### Exa Search Migration Note
+
+DotBot's built-in `Tools.Web.SearchProvider: "Exa"` uses a manual MCP call approach. This can now be replaced via MCP configuration:
+
+1. Add Exa server configuration in `McpServers`
+2. Switch `Tools.Web.SearchProvider` to `Bing` or another provider
+3. The Agent will get all Exa tools via MCP (not just search), including `web_search_exa`, `research_exa`, etc.
+
+---
+
+## QQ Bot Commands
+
+QQ Bot mode supports the following slash commands (send directly in chat):
+
+| Command | Description |
+|---------|-------------|
+| `/new` or `/clear` | Clear current session, start new conversation |
+| `/help` | Show available commands |
+| `/heartbeat trigger` | Manually trigger a heartbeat check |
+| `/cron list` | View all scheduled tasks |
+| `/cron remove <id>` | Delete a scheduled task |
+
+---
+
+## Full Configuration Example
+
+```json
+{
+    "ApiKey": "sk-your-api-key",
+    "Model": "gpt-4o-mini",
+    "EndPoint": "https://api.openai.com/v1",
+    "SystemInstructions": "You are DotBot, a concise and reliable CLI agent. Call tools as needed to complete tasks.",
+    "MaxToolCallRounds": 30,
+    "SubagentMaxToolCallRounds": 15,
+    "CompactSessions": true,
+    "Tools": {
+        "File": {
+            "RequireApprovalOutsideWorkspace": true,
+            "MaxFileSize": 10485760
+        },
+        "Shell": {
+            "RequireApprovalOutsideWorkspace": true,
+            "Timeout": 60,
+            "MaxOutputLength": 10000
+        },
+        "Web": {
+            "MaxChars": 50000,
+            "Timeout": 30,
+            "SearchMaxResults": 5,
+            "SearchProvider": "Bing"
+        }
+    },
+    "Security": {
+        "BlacklistedPaths": [
+            "~/.ssh",
+            "~/.gnupg",
+            "/etc/shadow"
+        ]
+    },
+    "QQBot": {
+        "Enabled": false,
+        "Host": "0.0.0.0",
+        "Port": 6700,
+        "AccessToken": "",
+        "AdminUsers": [],
+        "WhitelistedUsers": [],
+        "WhitelistedGroups": [],
+        "ApprovalTimeoutSeconds": 60
+    },
+    "WeComBot": {
+        "Enabled": false,
+        "Host": "0.0.0.0",
+        "Port": 9000,
+        "AdminUsers": [],
+        "WhitelistedUsers": [],
+        "WhitelistedChats": [],
+        "ApprovalTimeoutSeconds": 60,
+        "Robots": []
+    },
+    "Api": {
+        "Enabled": false,
+        "Host": "0.0.0.0",
+        "Port": 8080,
+        "ApiKey": "",
+        "AutoApprove": true,
+        "EnabledTools": []
+    },
+    "Heartbeat": {
+        "Enabled": false,
+        "IntervalSeconds": 1800,
+        "NotifyAdmin": false
+    },
+    "WeCom": {
+        "Enabled": false,
+        "WebhookUrl": ""
+    },
+    "Cron": {
+        "Enabled": false,
+        "StorePath": "cron/jobs.json"
+    },
+    "DashBoard": {
+        "Enabled": false,
+        "Host": "127.0.0.1",
+        "Port": 5880
+    },
+    "McpServers": []
+}
+```

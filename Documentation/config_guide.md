@@ -1,0 +1,706 @@
+# DotBot 配置指南
+
+本文档介绍 DotBot 的配置体系，包括全局配置、工作区配置、安全设置等。
+
+## 配置文件位置
+
+DotBot 支持两级配置：**全局配置**和**工作区配置**。
+
+| 配置文件 | 路径 | 用途 |
+|----------|------|------|
+| 全局配置 | `~/.bot/appsettings.json` | 默认 API Key、模型等全局设置 |
+| 工作区配置 | `<workspace>/.bot/appsettings.json` | 工作区特定的覆盖配置 |
+
+### 配置合并规则
+
+- **全局配置作为基础**：提供默认值
+- **工作区配置覆盖全局配置**：工作区中设置的值优先级更高
+- 未在工作区中设置的项会保留全局配置的值
+
+这种设计可以将 API Key 等敏感信息放在全局配置中，避免泄露到工作区（例如 Git 仓库）。
+
+### 使用示例
+
+**全局配置** (`~/.bot/appsettings.json`)：存放默认 API Key 和模型
+
+```json
+{
+    "ApiKey": "sk-your-default-api-key",
+    "Model": "gpt-4o-mini",
+    "EndPoint": "https://api.openai.com/v1"
+}
+```
+
+**工作区配置** (`<workspace>/.bot/appsettings.json`)：覆盖模型和功能设置，无需重复 API Key
+
+```json
+{
+    "Model": "deepseek-chat",
+    "EndPoint": "https://api.deepseek.com/v1",
+    "SystemInstructions": "你是项目助手，专注于代码分析。",
+    "QQBot": {
+        "Enabled": true,
+        "Port": 6700,
+        "AdminUsers": [123456789]
+    }
+}
+```
+
+此时 DotBot 会使用全局配置中的 `ApiKey`，但使用工作区中的 `Model`、`EndPoint` 和 `QQBot` 设置。
+
+---
+
+## 基础配置项
+
+| 配置项 | 说明 | 默认值 |
+|--------|------|--------|
+| `ApiKey` | LLM API Key（OpenAI 兼容格式） | 空 |
+| `Model` | 使用的模型名称 | `gpt-4o-mini` |
+| `EndPoint` | API 端点地址 | `https://api.openai.com/v1` |
+| `SystemInstructions` | 系统提示词 | 内置默认提示词 |
+| `MaxToolCallRounds` | 主 Agent 最大工具调用轮数 | `30` |
+| `SubagentMaxToolCallRounds` | 子 Agent 最大工具调用轮数 | `15` |
+| `CompactSessions` | 保存会话时是否压缩（移除工具调用消息） | `true` |
+
+---
+
+## 安全配置
+
+### 文件访问黑名单
+
+通过 `Security.BlacklistedPaths` 配置禁止访问的路径列表。黑名单是**全局生效**的，无论 CLI 模式还是 QQ Bot 模式都会拦截。
+
+```json
+{
+    "Security": {
+        "BlacklistedPaths": [
+            "~/.ssh",
+            "/etc/shadow",
+            "/etc/passwd",
+            "C:\\Windows\\System32"
+        ]
+    }
+}
+```
+
+#### 黑名单行为
+
+- **文件操作**：`read_file`、`write_file`、`edit_file`、`list_directory` 对黑名单路径的操作会被直接拒绝
+- **Shell 命令**：引用黑名单路径的 Shell 命令会被拒绝
+- **优先级**：黑名单检查优先于工作区边界检查，即使路径在工作区内也会被拦截
+- **路径匹配**：支持绝对路径和 `~` 展开，匹配时会检查路径是否为黑名单路径的子路径
+
+#### 推荐黑名单配置
+
+```json
+{
+    "Security": {
+        "BlacklistedPaths": [
+            "~/.ssh",
+            "~/.gnupg",
+            "~/.aws",
+            "/etc/shadow",
+            "/etc/sudoers"
+        ]
+    }
+}
+```
+
+### Shell 命令路径检测与工作区边界
+
+DotBot 会在执行 Shell 命令前对命令字符串进行**跨平台路径静态分析**（`ShellCommandInspector`），覆盖以下路径形式：
+
+**Unix 路径**
+- 绝对路径：`/etc/passwd`、`/var/log/syslog`
+- 家目录路径：`~/.ssh/config`
+- 环境变量家目录：`$HOME/.config`、`${HOME}/.gitconfig`
+- 安全设备白名单（不触发检测）：`/dev/null`、`/dev/stdout` 等
+
+**Windows 路径**
+- 盘符绝对路径：`C:\`、`D:\Users\Aki\file.txt`
+- 环境变量路径：`%USERPROFILE%\Documents`、`%APPDATA%\config`
+- UNC 路径：`\\server\share\file`
+- 安全设备白名单：`NUL`、`CON`、`PRN`、`AUX`
+
+**文件工具路径解析**
+
+`FileTools` 在解析文件路径时也会展开 `~`、`$HOME`、`${HOME}` 和 `%ENV%` 变量为实际路径，确保工作区边界检查对所有路径形式生效。
+
+**触发规则**
+
+若命令中引用的任意路径解析后位于工作区之外：
+- 当 `Tools.Shell.RequireApprovalOutsideWorkspace = false` 时：直接拒绝执行，并给出被检测到的路径列表
+- 当 `Tools.Shell.RequireApprovalOutsideWorkspace = true` 时：向当前交互源（控制台/QQ）发起审批，审批通过后才执行
+
+注意：即便工作目录（cwd）仍在工作区内，只要命令字符串中包含工作区外的路径，也会触发上述规则。
+
+示例：
+- `ls /etc` → 触发（Unix 绝对路径，工作区外）
+- `dir C:\` → 触发（Windows 盘符路径，工作区外）
+- `cat ~/.ssh/id_rsa` → 触发（家目录路径 + 建议加入黑名单）
+- `type %USERPROFILE%\Desktop\secret.txt` → 触发（Windows 环境变量路径）
+- `grep foo ${HOME}/.bashrc` → 触发（Unix 环境变量路径）
+- `ls ./src` → 工作区内正常执行
+- `echo test > /dev/null` → 安全设备白名单，不触发
+
+### 工具安全配置
+
+| 配置项 | 说明 | 默认值 |
+|--------|------|--------|
+| `Tools.File.RequireApprovalOutsideWorkspace` | 工作区外文件操作是否需要审批（`false` 则直接拒绝） | `true` |
+| `Tools.File.MaxFileSize` | 最大可读取文件大小（字节） | `10485760` (10MB) |
+| `Tools.Shell.RequireApprovalOutsideWorkspace` | 工作区外 Shell 命令是否需要审批（`false` 则直接拒绝） | `true` |
+| `Tools.Shell.Timeout` | Shell 命令超时时间（秒） | `60` |
+| `Tools.Shell.MaxOutputLength` | Shell 命令最大输出长度（字符） | `10000` |
+| `Tools.Web.MaxChars` | Web 抓取最大字符数 | `50000` |
+| `Tools.Web.Timeout` | Web 请求超时时间（秒） | `30` |
+| `Tools.Web.SearchMaxResults` | 联网搜索默认返回结果数（1-10） | `5` |
+| `Tools.Web.SearchProvider` | 搜索引擎提供商：`Bing`（默认，全球可用）、`Exa`（AI 优化，免费 MCP 接口）或 `DuckDuckGo`（可能被 CAPTCHA 拦截） | `Bing` |
+
+---
+
+## QQ Bot 配置
+
+QQ Bot 的详细配置说明请参考 [QQ 机器人使用指南](./qq_bot_guide.md)。
+
+以下是 QQ Bot 配置项速查：
+
+| 配置项 | 说明 | 默认值 |
+|--------|------|--------|
+| `QQBot.Enabled` | 是否启用 QQ 机器人模式 | `false` |
+| `QQBot.Host` | WebSocket 监听地址 | `0.0.0.0` |
+| `QQBot.Port` | WebSocket 监听端口 | `6700` |
+| `QQBot.AccessToken` | 鉴权 Token（需与 NapCat 一致） | 空 |
+| `QQBot.AdminUsers` | 管理员 QQ 号列表 | `[]` |
+| `QQBot.WhitelistedUsers` | 白名单用户 QQ 号列表 | `[]` |
+| `QQBot.WhitelistedGroups` | 白名单群号列表 | `[]` |
+| `QQBot.ApprovalTimeoutSeconds` | 操作审批超时（秒） | `60` |
+
+---
+
+## WeCom Bot 配置
+
+WeCom Bot 的详细配置说明请参考 [企业微信指南](./wecom_guide.md)。
+
+以下是 WeCom Bot 配置项速查：
+
+| 配置项 | 说明 | 默认值 |
+|--------|------|--------|
+| `WeComBot.Enabled` | 是否启用企业微信机器人模式 | `false` |
+| `WeComBot.Host` | HTTP 服务监听地址 | `0.0.0.0` |
+| `WeComBot.Port` | HTTP 服务监听端口 | `9000` |
+| `WeComBot.AdminUsers` | 管理员用户 ID 列表（企业微信 UserId） | `[]` |
+| `WeComBot.WhitelistedUsers` | 白名单用户 ID 列表（企业微信 UserId） | `[]` |
+| `WeComBot.WhitelistedChats` | 白名单会话 ID 列表（企业微信 ChatId） | `[]` |
+| `WeComBot.ApprovalTimeoutSeconds` | 操作审批超时（秒） | `60` |
+| `WeComBot.Robots` | 机器人配置列表（Path/Token/AesKey） | `[]` |
+
+**注意**：QQ Bot、WeCom Bot 和 API 模式不能同时启用，按 QQ Bot > WeCom Bot > API > CLI 的优先级选择。
+
+**权限说明**：
+- `AdminUsers`：拥有所有权限，工作区内写入操作需要审批
+- `WhitelistedUsers`：只能执行读取操作（文件读取、Web 搜索等）
+- `WhitelistedChats`：该会话中的所有用户自动获得白名单权限
+- 未在上述列表中的用户无法使用 Agent 功能
+
+**审批机制**：
+- 管理员执行工作区内/外写入操作时，会在企业微信会话中收到审批请求
+- 回复 "同意" 或 "允许" 批准操作，回复 "同意全部" 则本会话中不再询问同类操作
+- 回复 "拒绝" 或不回复（超时）则拒绝操作
+- 审批超时时间可通过 `ApprovalTimeoutSeconds` 配置
+
+---
+
+## 会话压缩
+
+`CompactSessions` 控制是否在保存会话时自动移除工具调用相关的消息，以减少会话文件体积并避免加载时的冗余数据。
+
+**压缩行为**：
+- 移除所有 `role: tool` 的消息（工具返回结果）
+- 移除 assistant 消息中的 `FunctionCallContent`（工具调用指令）
+- 如果 assistant 消息在移除 FunctionCallContent 后没有其他内容，则整条消息被移除
+- 保留 user 消息和 assistant 的文本回复
+
+**何时关闭**：如果你需要在会话文件中保留完整的工具调用历史（例如调试用途），可以设置 `"CompactSessions": false`。
+
+---
+
+## Token 用量统计
+
+DotBot 会自动从 LLM 响应中提取 token 用量信息并显示。
+
+- **CLI 模式**：每次回复后在控制台显示 `Tokens: X in / Y out / Z total`
+- **QQ 模式**：每次回复末尾附加 `[Tokens: X in / Y out / Z total]`
+
+无需额外配置。token 统计依赖 LLM 提供商在 streaming 响应中返回 `UsageContent`，部分提供商可能不支持。
+
+---
+
+## Heartbeat 心跳服务
+
+Heartbeat 定时读取 .bot 目录的 `HEARTBEAT.md` 文件，如有可执行内容则自动交给 Agent 处理。适用于定期巡检、状态监控等场景。
+
+| 配置项 | 说明 | 默认值 |
+|--------|------|--------|
+| `Heartbeat.Enabled` | 是否启用心跳服务 | `false` |
+| `Heartbeat.IntervalSeconds` | 检查间隔（秒） | `1800`（30 分钟） |
+| `Heartbeat.NotifyAdmin` | QQ 模式下是否将结果私信通知管理员 | `false` |
+
+### Heartbeat 配置示例
+
+```json
+{
+    "Heartbeat": {
+        "Enabled": true,
+        "IntervalSeconds": 1800,
+        "NotifyAdmin": false
+    }
+}
+```
+
+**控制台输出**：Heartbeat 执行时会在控制台输出工具调用和结果，格式为 `[Heartbeat] tool_name args` / `[Heartbeat] Result: ...`，方便调试。
+
+**管理员通知**：QQ 模式下设置 `"NotifyAdmin": true`，Heartbeat 自动执行后会将结果私信发送给所有 `AdminUsers`。
+
+### Heartbeat 使用方法
+
+1. 在 .bot 目录创建 `HEARTBEAT.md` 文件
+2. 写入需要定期执行的任务：
+
+```markdown
+# Heartbeat Tasks
+
+## Active Tasks
+- 检查项目是否有新的 GitHub issue 并汇总
+- 检查日志文件是否有异常
+```
+
+3. 启动 DotBot（QQ 模式下自动运行，CLI 模式下可通过 `/heartbeat trigger` 手动触发）
+4. Agent 会根据 HEARTBEAT.md 的内容自动执行任务。如果文件为空或仅包含标题/注释，则跳过
+5. Heartbeat 拥有独立的 Session 管理，但和主 Agent 共享长期记忆。
+
+### 手动触发
+
+- **CLI 模式**：输入 `/heartbeat trigger`
+- **QQ 模式**：发送 `/heartbeat trigger`
+
+---
+
+## 企业微信集成
+
+DotBot 提供两种企业微信集成能力：
+
+| 能力 | 配置节 | 说明 |
+|------|--------|------|
+| 企业微信推送 | `WeCom` | 通过群机器人 Webhook 向企业微信群发送通知 |
+| 企业微信机器人 | `WeComBot` | 作为独立运行模式，接收并响应企业微信消息 |
+
+### 快速配置
+
+**企业微信推送**（Webhook 通知）：
+
+```json
+{
+    "WeCom": {
+        "Enabled": true,
+        "WebhookUrl": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY"
+    }
+}
+```
+
+**企业微信机器人模式**（双向交互）：
+
+```json
+{
+    "WeComBot": {
+        "Enabled": true,
+        "Port": 9000,
+        "Host": "0.0.0.0",
+        "AdminUsers": ["zhangsan", "lisi"],
+        "WhitelistedUsers": ["wangwu"],
+        "WhitelistedChats": ["wrxxxxxxxx"],
+        "ApprovalTimeoutSeconds": 60,
+        "Robots": [
+            {
+                "Path": "/dotbot",
+                "Token": "your_token",
+                "AesKey": "your_aeskey"
+            }
+        ]
+    }
+}
+```
+
+详细配置、使用方式、部署指南和故障排查见 [企业微信指南](./wecom_guide.md)。
+
+---
+
+## API 模式配置
+
+API 模式将 DotBot 作为 OpenAI 兼容的 HTTP 服务暴露，外部应用可直接使用标准 OpenAI SDK 调用。基于 [Microsoft.Agents.AI.Hosting.OpenAI](https://github.com/microsoft/agent-framework) 官方框架实现。
+
+详细使用指南见 [API 模式指南](./api_guide.md)。
+
+以下是 API 模式配置项速查：
+
+| 配置项 | 说明 | 默认值 |
+|--------|------|--------|
+| `Api.Enabled` | 是否启用 API 模式 | `false` |
+| `Api.Host` | HTTP 服务监听地址 | `0.0.0.0` |
+| `Api.Port` | HTTP 服务监听端口 | `8080` |
+| `Api.ApiKey` | API 访问密钥（Bearer Token），为空时不验证 | 空 |
+| `Api.AutoApprove` | 是否自动批准所有文件/Shell 操作（被 ApprovalMode 覆盖） | `true` |
+| `Api.ApprovalMode` | 审批模式：`auto`/`reject`/`interactive` | 空 |
+| `Api.ApprovalTimeoutSeconds` | interactive 模式下审批超时（秒） | `120` |
+| `Api.EnabledTools` | 启用的工具列表，为空时启用所有工具 | `[]` |
+
+### API 模式配置示例
+
+**基本配置**（启用所有工具，无认证）：
+
+```json
+{
+    "Api": {
+        "Enabled": true,
+        "Port": 8080,
+        "AutoApprove": true
+    }
+}
+```
+
+**仅暴露搜索工具**（适用于搜索服务场景）：
+
+```json
+{
+    "Api": {
+        "Enabled": true,
+        "Port": 8080,
+        "ApiKey": "your-api-access-key",
+        "AutoApprove": false,
+        "EnabledTools": ["web_search", "web_fetch"]
+    }
+}
+```
+
+### 工具过滤
+
+`EnabledTools` 支持过滤内置工具和 MCP 服务器注册的工具。为空数组或不设置时启用所有工具。
+
+可用的内置工具名称：`spawn_subagent`、`read_file`、`write_file`、`edit_file`、`grep_files`、`find_files`、`exec`、`web_search`、`web_fetch`、`cron`、`wecom_notify`。
+
+### 认证
+
+当 `Api.ApiKey` 配置为非空值时，所有 API 请求需要携带 Bearer Token：
+
+```
+Authorization: Bearer your-api-access-key
+```
+
+### 审批机制
+
+API 模式支持三种审批模式，通过 `ApprovalMode` 配置（设置后覆盖 `AutoApprove`）：
+
+- **`auto`**：所有文件操作和 Shell 命令自动批准（等价 `AutoApprove: true`）
+- **`reject`**：所有文件操作和 Shell 命令自动拒绝（等价 `AutoApprove: false`）
+- **`interactive`**：Human-in-the-Loop 模式，敏感操作暂停等待 API 客户端通过 `/v1/approvals` 端点审批
+
+`ApprovalTimeoutSeconds` 控制 interactive 模式下的审批超时时间（默认 120 秒），超时未审批则自动拒绝。
+
+详细说明和 Python 示例见 [API 模式指南](./api_guide.md#human-in-the-loop-交互式审批)。
+
+---
+
+## Cron 定时任务服务
+
+Cron 是一个定时任务调度系统，支持一次性和周期性任务。任务持久化到 JSON 文件中，重启后自动恢复。
+
+| 配置项 | 说明 | 默认值 |
+|--------|------|--------|
+| `Cron.Enabled` | 是否启用定时任务 | `false` |
+| `Cron.StorePath` | 任务存储文件路径（相对于 `.bot/`） | `cron/jobs.json` |
+
+### Cron 配置示例
+
+```json
+{
+    "Cron": {
+        "Enabled": true,
+        "StorePath": "cron/jobs.json"
+    }
+}
+```
+
+### 调度类型
+
+| 类型 | 说明 | 参数 |
+|------|------|------|
+| `at` | 一次性任务，在指定时间执行后自动删除 | `AtMs`（Unix 毫秒时间戳） |
+| `every` | 周期性任务，按固定间隔重复执行 | `EveryMs`（间隔毫秒数） |
+
+### 投递渠道
+
+Cron 任务支持多种投递渠道（需在创建任务时设置 `deliver: true`）：
+
+| 渠道参数 | 说明 | 前置条件 |
+|----------|------|----------|
+| `channel: "<群号>"` | 投递到指定 QQ 群 | QQ Bot 模式 |
+| `to: "<QQ号>"` | 投递到指定 QQ 私聊 | QQ Bot 模式 |
+| `channel: "wecom"` | 投递到企业微信群 | 启用 WeCom 配置 |
+
+### Agent 自助创建任务
+
+启用 Cron 后，Agent 可通过 `Cron` 工具自行创建定时任务。例如在对话中说"每小时提醒我喝水"，Agent 会调用：
+
+```
+Cron(action: "add", message: "提醒用户喝水", everySeconds: 3600, name: "喝水提醒")
+```
+
+### 命令行管理
+
+**CLI 模式**：
+- `/cron list` — 查看所有任务
+- `/cron remove <jobId>` — 删除任务
+- `/cron enable <jobId>` — 启用任务
+- `/cron disable <jobId>` — 禁用任务
+
+**QQ 模式**：
+- `/cron list` — 查看所有任务
+- `/cron remove <jobId>` — 删除任务
+
+---
+
+## MCP 服务接入
+
+DotBot 支持通过 [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) 接入外部工具服务。MCP 是一个开放协议，用于标准化 AI 应用与外部工具/数据源的集成方式。
+
+配置后，MCP 服务器提供的工具会自动注册到 Agent 中，与内置工具（文件、Shell、Web 等）一起使用。
+
+### 配置项
+
+`McpServers` 是一个数组，每个元素定义一个 MCP 服务器连接：
+
+| 配置项 | 说明 | 默认值 |
+|--------|------|--------|
+| `Name` | 服务器名称（用于日志和工具追踪） | 空 |
+| `Enabled` | 是否启用该服务器 | `true` |
+| `Transport` | 传输方式：`stdio`（本地进程）或 `http`（HTTP/SSE） | `stdio` |
+| `Command` | 启动命令（仅 stdio） | 空 |
+| `Arguments` | 命令参数列表（仅 stdio） | `[]` |
+| `EnvironmentVariables` | 环境变量（仅 stdio） | `{}` |
+| `Url` | 服务器地址（仅 http），如 `https://mcp.exa.ai/mcp` | 空 |
+| `Headers` | 附加 HTTP 请求头（仅 http） | `{}` |
+
+### 传输方式
+
+**HTTP/SSE 传输**：连接远程 MCP 服务器，适用于云端 MCP 服务（如 Exa）。
+
+```json
+{
+    "McpServers": [
+        {
+            "Name": "exa",
+            "Transport": "http",
+            "Url": "https://mcp.exa.ai/mcp"
+        }
+    ]
+}
+```
+
+**Stdio 传输**：启动本地进程并通过 stdin/stdout 通信，适用于本地 MCP 服务器。
+
+```json
+{
+    "McpServers": [
+        {
+            "Name": "filesystem",
+            "Transport": "stdio",
+            "Command": "npx",
+            "Arguments": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/dir"]
+        }
+    ]
+}
+```
+
+### 带认证的 MCP 服务器
+
+部分 MCP 服务器需要 API Key 认证，可通过 `Headers`（HTTP）或 `EnvironmentVariables`（stdio）传递：
+
+```json
+{
+    "McpServers": [
+        {
+            "Name": "my-service",
+            "Transport": "http",
+            "Url": "https://example.com/mcp",
+            "Headers": {
+                "Authorization": "Bearer your-api-key"
+            }
+        },
+        {
+            "Name": "local-tool",
+            "Transport": "stdio",
+            "Command": "my-mcp-server",
+            "EnvironmentVariables": {
+                "API_KEY": "your-api-key"
+            }
+        }
+    ]
+}
+```
+
+### 多服务器配置
+
+可以同时接入多个 MCP 服务器，所有服务器的工具会合并注册到 Agent：
+
+```json
+{
+    "McpServers": [
+        {
+            "Name": "exa",
+            "Transport": "http",
+            "Url": "https://mcp.exa.ai/mcp"
+        },
+        {
+            "Name": "github",
+            "Transport": "stdio",
+            "Command": "npx",
+            "Arguments": ["-y", "@modelcontextprotocol/server-github"],
+            "EnvironmentVariables": {
+                "GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_xxxxx"
+            }
+        }
+    ]
+}
+```
+
+### 禁用单个服务器
+
+设置 `Enabled: false` 可临时禁用某个 MCP 服务器，无需删除配置：
+
+```json
+{
+    "McpServers": [
+        {
+            "Name": "exa",
+            "Enabled": false,
+            "Transport": "http",
+            "Url": "https://mcp.exa.ai/mcp"
+        }
+    ]
+}
+```
+
+### 启动行为
+
+- MCP 服务器在应用启动时自动连接，连接成功后会在控制台输出已发现的工具数量
+- 连接失败不会阻止应用启动，失败的服务器会输出错误日志
+- 应用退出时自动断开所有 MCP 连接
+
+### Exa 搜索迁移说明
+
+DotBot 内置的 `Tools.Web.SearchProvider: "Exa"` 使用的是手动 MCP 调用方式。现在可以通过 MCP 配置替代：
+
+1. 在 `McpServers` 中添加 Exa 服务器配置
+2. 将 `Tools.Web.SearchProvider` 切换为 `Bing` 或其他提供商
+3. Agent 将通过 MCP 获得 Exa 的所有工具（不仅是搜索），包括 `web_search_exa`、`research_exa` 等
+
+---
+
+## QQ Bot 命令
+
+QQ Bot 模式下支持以下斜杠命令（直接在聊天中发送）：
+
+| 命令 | 说明 |
+|------|------|
+| `/new` 或 `/clear` | 清除当前会话，开始新对话 |
+| `/help` | 显示可用命令列表 |
+| `/heartbeat trigger` | 手动触发一次心跳检查 |
+| `/cron list` | 查看所有定时任务 |
+| `/cron remove <id>` | 删除指定定时任务 |
+
+---
+
+## 完整配置示例
+
+```json
+{
+    "ApiKey": "sk-your-api-key",
+    "Model": "gpt-4o-mini",
+    "EndPoint": "https://api.openai.com/v1",
+    "SystemInstructions": "你是 DotBot，一个简洁、可靠的 CLI 智能体。必要时调用工具完成任务。",
+    "MaxToolCallRounds": 30,
+    "SubagentMaxToolCallRounds": 15,
+    "CompactSessions": true,
+    "Tools": {
+        "File": {
+            "RequireApprovalOutsideWorkspace": true,
+            "MaxFileSize": 10485760
+        },
+        "Shell": {
+            "RequireApprovalOutsideWorkspace": true,
+            "Timeout": 60,
+            "MaxOutputLength": 10000
+        },
+        "Web": {
+            "MaxChars": 50000,
+            "Timeout": 30,
+            "SearchMaxResults": 5,
+            "SearchProvider": "Bing"
+        }
+    },
+    "Security": {
+        "BlacklistedPaths": [
+            "~/.ssh",
+            "~/.gnupg",
+            "/etc/shadow"
+        ]
+    },
+    "QQBot": {
+        "Enabled": false,
+        "Host": "0.0.0.0",
+        "Port": 6700,
+        "AccessToken": "",
+        "AdminUsers": [],
+        "WhitelistedUsers": [],
+        "WhitelistedGroups": [],
+        "ApprovalTimeoutSeconds": 60
+    },
+    "WeComBot": {
+        "Enabled": false,
+        "Host": "0.0.0.0",
+        "Port": 9000,
+        "AdminUsers": [],
+        "WhitelistedUsers": [],
+        "WhitelistedChats": [],
+        "ApprovalTimeoutSeconds": 60,
+        "Robots": []
+    },
+    "Api": {
+        "Enabled": false,
+        "Host": "0.0.0.0",
+        "Port": 8080,
+        "ApiKey": "",
+        "AutoApprove": true,
+        "EnabledTools": []
+    },
+    "Heartbeat": {
+        "Enabled": false,
+        "IntervalSeconds": 1800,
+        "NotifyAdmin": false
+    },
+    "WeCom": {
+        "Enabled": false,
+        "WebhookUrl": ""
+    },
+    "Cron": {
+        "Enabled": false,
+        "StorePath": "cron/jobs.json"
+    },
+    "DashBoard": {
+        "Enabled": false,
+        "Host": "127.0.0.1",
+        "Port": 5880
+    },
+    "McpServers": []
+}
+```

@@ -1,0 +1,25 @@
+﻿using System.ComponentModel;
+using DotBot.Agents;
+using DotBot.Attributes;
+
+namespace DotBot.Tools;
+
+/// <summary>
+/// Core tools for DotBot agent.
+/// </summary>
+public sealed class AgentTools(SubAgentManager? subAgentManager = null)
+{
+    [Description("Spawn a subagent to execute a task in the background. The subagent will work independently and report back when done.")]
+    [ToolIcon(Icon = "🐧")]
+    public async Task<string> SpawnSubagent(
+        [Description("The task description for the subagent.")] string task,
+        [Description("Optional human-readable label for the task.")] string? label = null)
+    {
+        if (subAgentManager == null)
+        {
+            return "Subagent functionality is not available.";
+        }
+
+        return await subAgentManager.SpawnAsync(task, label);
+    }
+}

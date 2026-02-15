@@ -1,0 +1,6 @@
+请帮我测试 subagent 功能。请创建一个 subagent 来完成以下任务：
+1. 在工作区创建一个测试文件 test_subagent.txt，内容为 "Hello from Subagent! Time: " 加上当前时间
+2. 列出工作区根目录的文件，确认该文件已创建
+3. 读取刚才创建的文件，验证内容是否正确
+
+完成后请告诉我 subagent 的执行结果。

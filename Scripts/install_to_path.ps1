@@ -1,0 +1,82 @@
+# DotBot - Install to System PATH
+
+$ErrorActionPreference = "Stop"
+
+Write-Host "================================" -ForegroundColor Cyan
+Write-Host "DotBot Installer" -ForegroundColor Cyan
+Write-Host "================================" -ForegroundColor Cyan
+Write-Host ""
+
+# Get the directory where this script is located
+$installDir = $PSScriptRoot
+if ([string]::IsNullOrEmpty($installDir)) {
+    $installDir = Get-Location
+}
+
+Write-Host "Installation directory: $installDir" -ForegroundColor Cyan
+Write-Host ""
+
+# Check if required files exist
+$exePath = Join-Path $installDir "DotBot.exe"
+$batPath = Join-Path $installDir "dotbot.bat"
+$ps1WrapperPath = Join-Path $installDir "dotbot.ps1"
+
+$missingFiles = @()
+if (-not (Test-Path $exePath)) { $missingFiles += "DotBot.exe" }
+if (-not (Test-Path $batPath)) { $missingFiles += "dotbot.bat" }
+
+if ($missingFiles.Count -gt 0) {
+    Write-Host "Error: Missing required files!" -ForegroundColor Red
+    $missingFiles | ForEach-Object { Write-Host "  - $_" -ForegroundColor Yellow }
+    Write-Host ""
+    Write-Host "Please ensure all files are in the same folder" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "Press any key to exit..."
+    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    exit 1
+}
+
+Write-Host "Found: DotBot.exe" -ForegroundColor Green
+Write-Host "Found: dotbot.bat (wrapper script)" -ForegroundColor Green
+if (Test-Path $ps1WrapperPath) {
+    Write-Host "Found: dotbot.ps1 (PowerShell wrapper)" -ForegroundColor Green
+}
+Write-Host ""
+
+# Check if running as administrator
+$isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+Write-Host "Adding to system PATH..." -ForegroundColor Green
+$pathScope = if ($isAdmin) { "Machine" } else { "User" }
+Write-Host "Scope: $pathScope PATH" -ForegroundColor Cyan
+
+if (-not $isAdmin) {
+    Write-Host "Note: Running as user (not administrator)" -ForegroundColor Yellow
+    Write-Host "      Will modify user PATH only" -ForegroundColor Yellow
+}
+
+Write-Host ""
+
+# Get current PATH
+$currentPath = [Environment]::GetEnvironmentVariable("Path", $pathScope)
+
+# Check if already in PATH
+if ($currentPath -like "*$installDir*") {
+    Write-Host "This directory is already in $pathScope PATH" -ForegroundColor Yellow
+} else {
+    # Add to PATH
+    $newPath = "$currentPath;$installDir"
+    [Environment]::SetEnvironmentVariable("Path", $newPath, $pathScope)
+    Write-Host "Successfully added to $pathScope PATH!" -ForegroundColor Green
+}
+
+Write-Host ""
+Write-Host "================================" -ForegroundColor Cyan
+Write-Host "Installation Complete!" -ForegroundColor Green
+Write-Host "================================" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "IMPORTANT: " -ForegroundColor Yellow -NoNewline
+Write-Host "Please restart your terminal for PATH changes to take effect" -ForegroundColor White
+Write-Host ""
+Write-Host "Press any key to exit..."
+$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
