@@ -6,7 +6,6 @@ namespace DotBot.Modules.Registry;
 /// <summary>
 /// Registry for managing DotBot modules.
 /// Provides module discovery, registration, and selection capabilities.
-/// Supports both source generator and reflection-based discovery.
 /// </summary>
 public sealed partial class ModuleRegistry
 {
@@ -27,8 +26,7 @@ public sealed partial class ModuleRegistry
         RegisterSourceGeneratedModules();
     }
 
-    // Partial method - will be implemented by source generator if modules are found
-    // If not implemented, the call is removed by compiler and we fall back to reflection
+    // Partial method - will be implemented by source generator
     partial void RegisterSourceGeneratedModules();
 
     /// <summary>
