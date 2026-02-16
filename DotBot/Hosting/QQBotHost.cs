@@ -1,3 +1,5 @@
+using System.ClientModel;
+using DotBot.Abstractions;
 using DotBot.Agents;
 using DotBot.Cron;
 using DotBot.DashBoard;
@@ -5,9 +7,11 @@ using DotBot.Heartbeat;
 using DotBot.Mcp;
 using DotBot.Memory;
 using DotBot.QQ;
+using DotBot.QQ.Factories;
 using DotBot.Security;
 using DotBot.Skills;
 using Microsoft.Extensions.DependencyInjection;
+using OpenAI;
 using Spectre.Console;
 
 namespace DotBot.Hosting;
@@ -30,24 +34,50 @@ public sealed class QQBotHost(
         var traceStore = sp.GetService<TraceStore>();
         var tokenUsageStore = sp.GetService<TokenUsageStore>();
 
-        var qqToken = string.IsNullOrEmpty(config.QQBot.AccessToken) ? null : config.QQBot.AccessToken;
-        var qqClient = new QQBotClient(config.QQBot.Host, config.QQBot.Port, qqToken);
-        qqClient.OnLog += msg => AnsiConsole.MarkupLine($"[grey][[QQ]] {Markup.Escape(msg)}[/]");
+        // Use factories to create channel-specific clients and services
+        var moduleContext = new ModuleContext
+        {
+            Config = config,
+            Paths = paths,
+            ServiceProvider = sp
+        };
 
-        var permissionService = new QQPermissionService(
-            config.QQBot.AdminUsers,
-            config.QQBot.WhitelistedUsers,
-            config.QQBot.WhitelistedGroups);
+        var qqClient = QQClientFactory.CreateClient(moduleContext);
+        var permissionService = QQClientFactory.CreatePermissionService(moduleContext);
 
-        var qqApprovalService = new QQApprovalService(
-            qqClient, permissionService, config.QQBot.ApprovalTimeoutSeconds);
+        var approvalContext = new ApprovalServiceContext
+        {
+            Config = config,
+            WorkspacePath = paths.WorkspacePath,
+            ChannelClient = qqClient,
+            PermissionService = permissionService,
+            ApprovalTimeoutSeconds = config.QQBot.ApprovalTimeoutSeconds
+        };
+        var approvalFactory = new QQApprovalServiceFactory();
+        var qqApprovalService = (QQApprovalService)approvalFactory.Create(approvalContext);
 
         var agentFactory = new AgentFactory(
             paths.BotPath, paths.WorkspacePath, config,
             memoryStore, skillsLoader, qqApprovalService, blacklist,
-            qqBotClient: qqClient,
-            cronTools: cronTools,
-            mcpClientManager: mcpClientManager.Tools.Count > 0 ? mcpClientManager : null,
+            toolProviders: null,
+            toolProviderContext: new ToolProviderContext
+            {
+                Config = config,
+                ChatClient = new OpenAIClient(new ApiKeyCredential(config.ApiKey), new OpenAIClientOptions
+                {
+                    Endpoint = new Uri(config.EndPoint)
+                }).GetChatClient(config.Model),
+                WorkspacePath = paths.WorkspacePath,
+                BotPath = paths.BotPath,
+                MemoryStore = memoryStore,
+                SkillsLoader = skillsLoader,
+                ApprovalService = qqApprovalService,
+                PathBlacklist = blacklist,
+                CronTools = cronTools,
+                McpClientManager = mcpClientManager.Tools.Count > 0 ? mcpClientManager : null,
+                TraceCollector = traceCollector,
+                ChannelClient = qqClient
+            },
             traceCollector: traceCollector);
 
         var agent = agentFactory.CreateDefaultAgent();

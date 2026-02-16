@@ -1,16 +1,26 @@
+using DotBot.Configuration;
+using DotBot.Configuration.Core;
 using DotBot.Cron;
 using DotBot.DashBoard;
 using DotBot.Localization;
 using DotBot.Mcp;
 using DotBot.Memory;
+using DotBot.Modules.Registry;
 using DotBot.Security;
 using DotBot.Skills;
 using Microsoft.Extensions.DependencyInjection;
+using Spectre.Console;
 
 namespace DotBot.Hosting;
 
 public static class ServiceRegistration
 {
+    /// <summary>
+    /// Gets or sets a value indicating whether to force reflection-based module discovery.
+    /// When true, skips source generator and uses reflection fallback.
+    /// </summary>
+    public static bool ForceReflectionDiscovery { get; set; } = false;
+
     public static IServiceCollection AddDotBot(
         this IServiceCollection services,
         AppConfig config,
@@ -36,6 +46,9 @@ public static class ServiceRegistration
 
         services.AddSingleton<McpClientManager>();
 
+        // Register module configurations
+        services.AddModuleConfigurations(config);
+
         if (config.DashBoard.Enabled)
         {
             var dashboardStoragePath = Path.Combine(botPath, "dashboard");
@@ -52,26 +65,64 @@ public static class ServiceRegistration
         return services;
     }
 
-    extension(IServiceProvider provider)
+    /// <summary>
+    /// Creates and configures the module registry with automatic discovery.
+    /// Uses source generator by default, falls back to reflection if needed.
+    /// </summary>
+    /// <returns>The configured module registry.</returns>
+    public static ModuleRegistry CreateModuleRegistry()
     {
-        public async Task InitializeServicesAsync()
+        // Module discovery uses source generator by default, with reflection fallback
+        // Set ForceReflectionDiscovery = true to force reflection mode (for debugging)
+        return new ModuleRegistry(forceReflection: ForceReflectionDiscovery);
+    }
+
+    /// <summary>
+    /// Validates module configurations and prints diagnostics.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="config">The application configuration.</param>
+    /// <returns>True if all configurations are valid.</returns>
+    public static bool ValidateConfigurations(this IServiceCollection services, AppConfig config)
+    {
+        var provider = new ModuleConfigProvider(config);
+        provider.RegisterBinder<Configuration.Modules.QQModuleConfig, Configuration.Binders.QQModuleConfigBinder>();
+        provider.RegisterBinder<Configuration.Modules.WeComModuleConfig, Configuration.Binders.WeComModuleConfigBinder>();
+        provider.RegisterBinder<Configuration.Modules.ApiModuleConfig, Configuration.Binders.ApiModuleConfigBinder>();
+        provider.RegisterBinder<Configuration.Modules.CliModuleConfig, Configuration.Binders.CliModuleConfigBinder>();
+
+        var validationResults = provider.ValidateAll();
+        if (validationResults.Count > 0)
         {
-            var config = provider.GetRequiredService<AppConfig>();
-            var mcpManager = provider.GetRequiredService<McpClientManager>();
-            if (config.McpServers.Count > 0)
+            foreach (var (section, errors) in validationResults)
             {
-                await mcpManager.ConnectAsync(config.McpServers);
+                foreach (var error in errors)
+                {
+                    AnsiConsole.MarkupLine($"[yellow][[Config]] Warning: {section} - {Markup.Escape(error)}[/]");
+                }
             }
+            return false;
         }
+        return true;
+    }
 
-        public async ValueTask DisposeServicesAsync()
+    public static async Task InitializeServicesAsync(this IServiceProvider provider)
+    {
+        var config = provider.GetRequiredService<AppConfig>();
+        var mcpManager = provider.GetRequiredService<McpClientManager>();
+        if (config.McpServers.Count > 0)
         {
-            var cronService = provider.GetRequiredService<CronService>();
-            cronService.Stop();
-            cronService.Dispose();
-
-            var mcpManager = provider.GetRequiredService<McpClientManager>();
-            await mcpManager.DisposeAsync();
+            await mcpManager.ConnectAsync(config.McpServers);
         }
+    }
+
+    public static async ValueTask DisposeServicesAsync(this IServiceProvider provider)
+    {
+        var cronService = provider.GetRequiredService<CronService>();
+        cronService.Stop();
+        cronService.Dispose();
+
+        var mcpManager = provider.GetRequiredService<McpClientManager>();
+        await mcpManager.DisposeAsync();
     }
 }

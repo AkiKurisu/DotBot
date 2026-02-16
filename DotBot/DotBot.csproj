@@ -12,6 +12,9 @@
     <AssemblyTitle>DotBot</AssemblyTitle>
     <ProductName>DotBot</ProductName>
     <ApplicationIcon>Resources\favicon.ico</ApplicationIcon>
+
+    <!-- Emit compiler generated files for debugging -->
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)'=='Release'">
@@ -36,6 +39,12 @@
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <!-- Source Generator and Abstractions Reference -->
+  <ItemGroup>
+    <ProjectReference Include="..\DotBot.Modules\DotBot.Modules.csproj" />
+    <ProjectReference Include="..\DotBot.Modules.Gen\DotBot.Modules.Gen.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

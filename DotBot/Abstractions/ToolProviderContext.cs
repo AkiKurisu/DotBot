@@ -1,0 +1,77 @@
+using DotBot.Cron;
+using DotBot.DashBoard;
+using DotBot.Mcp;
+using DotBot.Memory;
+using DotBot.Security;
+using DotBot.Skills;
+using OpenAI.Chat;
+
+namespace DotBot.Abstractions;
+
+/// <summary>
+/// Provides context information for tool provider to create tools.
+/// </summary>
+public sealed class ToolProviderContext
+{
+    /// <summary>
+    /// The application configuration.
+    /// </summary>
+    public required AppConfig Config { get; init; }
+
+    /// <summary>
+    /// The chat client for AI interactions.
+    /// Required for subagent spawning and other AI-powered tools.
+    /// </summary>
+    public required ChatClient ChatClient { get; init; }
+
+    /// <summary>
+    /// The workspace path.
+    /// </summary>
+    public required string WorkspacePath { get; init; }
+
+    /// <summary>
+    /// The bot path for configuration and memory storage.
+    /// </summary>
+    public required string BotPath { get; init; }
+
+    /// <summary>
+    /// The memory store for context persistence.
+    /// </summary>
+    public required MemoryStore MemoryStore { get; init; }
+
+    /// <summary>
+    /// The skills loader for skill-based tools.
+    /// </summary>
+    public required SkillsLoader SkillsLoader { get; init; }
+
+    /// <summary>
+    /// The approval service for sensitive operations.
+    /// </summary>
+    public required IApprovalService ApprovalService { get; init; }
+
+    /// <summary>
+    /// Optional path blacklist for security restrictions.
+    /// </summary>
+    public PathBlacklist? PathBlacklist { get; init; }
+
+    /// <summary>
+    /// Optional cron tools for scheduled tasks.
+    /// </summary>
+    public CronTools? CronTools { get; init; }
+
+    /// <summary>
+    /// Optional MCP client manager for external tool integration.
+    /// </summary>
+    public McpClientManager? McpClientManager { get; init; }
+
+    /// <summary>
+    /// Optional trace collector for debugging and monitoring.
+    /// </summary>
+    public TraceCollector? TraceCollector { get; init; }
+
+    /// <summary>
+    /// Optional channel-specific client (e.g., QQBotClient).
+    /// Used by channel-specific tool providers.
+    /// </summary>
+    public object? ChannelClient { get; init; }
+}

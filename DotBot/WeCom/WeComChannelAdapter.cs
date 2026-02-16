@@ -1,7 +1,10 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using DotBot.Agents;
 using DotBot.CLI;
+using DotBot.Commands.ChannelAdapters;
+using DotBot.Commands.Core;
 using DotBot.Cron;
 using DotBot.DashBoard;
 using DotBot.Heartbeat;
@@ -33,6 +36,10 @@ public sealed class WeComChannelAdapter : IAsyncDisposable
     private readonly TraceCollector? _traceCollector;
 
     private readonly TokenUsageStore? _tokenUsageStore;
+    
+    private readonly AgentFactory? _agentFactory;
+    
+    private readonly CommandDispatcher _commandDispatcher;
 
     public WeComChannelAdapter(
         AIAgent agent,
@@ -42,6 +49,7 @@ public sealed class WeComChannelAdapter : IAsyncDisposable
         WeComApprovalService approvalService,
         HeartbeatService? heartbeatService = null,
         CronService? cronService = null,
+        AgentFactory? agentFactory = null,
         TraceCollector? traceCollector = null,
         TokenUsageStore? tokenUsageStore = null)
     {
@@ -49,10 +57,14 @@ public sealed class WeComChannelAdapter : IAsyncDisposable
         _sessionStore = sessionStore;
         _heartbeatService = heartbeatService;
         _cronService = cronService;
+        _agentFactory = agentFactory;
         _permissionService = permissionService;
         _approvalService = approvalService;
         _traceCollector = traceCollector;
         _tokenUsageStore = tokenUsageStore;
+        
+        // Initialize command dispatcher with built-in handlers
+        _commandDispatcher = CommandDispatcher.CreateDefault();
 
         // Attach handlers to all registered bot paths
         foreach (var path in registry.GetAllPaths())
@@ -129,13 +141,14 @@ public sealed class WeComChannelAdapter : IAsyncDisposable
 
             var textBuffer = new StringBuilder();
             long inputTokens = 0, outputTokens = 0, totalTokens = 0;
+            var tokenTracker = _agentFactory?.GetOrCreateTokenTracker(sessionId);
             var toolTimers = new Dictionary<string, Stopwatch>();
             var toolNameMap = new Dictionary<string, string>();
 
             _traceCollector?.RecordSessionMetadata(
                 sessionId,
                 null,
-                ToolIconRegistry.GetAllToolIcons().Keys);
+                _agentFactory?.LastCreatedTools?.Select(t => t.Name));
             _traceCollector?.RecordRequest(sessionId, plainText);
 
             TracingChatClient.CurrentSessionKey = sessionId;
@@ -207,7 +220,12 @@ public sealed class WeComChannelAdapter : IAsyncDisposable
             var responseText = textBuffer.ToString();
 
             if (totalTokens > 0)
-                textBuffer.Append($"\n\n[↑ {inputTokens} input ↓ {outputTokens} output]");
+            {
+                tokenTracker?.Update(inputTokens, outputTokens);
+                var displayInput = tokenTracker?.LastInputTokens ?? inputTokens;
+                var displayOutput = tokenTracker?.TotalOutputTokens ?? outputTokens;
+                textBuffer.Append($"\n\n[↑ {displayInput} input ↓ {displayOutput} output]");
+            }
 
             await FlushTextBufferAsync(pusher, textBuffer);
             _traceCollector?.RecordResponse(sessionId, string.IsNullOrWhiteSpace(responseText) ? null : responseText);
@@ -301,177 +319,30 @@ public sealed class WeComChannelAdapter : IAsyncDisposable
 
     private async Task<bool> HandleCommandAsync(IWeComPusher pusher, string text, string sessionId)
     {
-        var cmd = text.Trim().ToLowerInvariant();
-
-        switch (cmd)
+        // Get user info from context
+        var chatContext = WeComChatContextScope.Current;
+        var userId = chatContext?.UserId ?? "";
+        var userName = chatContext?.UserName ?? "";
+        var chatId = pusher.GetChatId();
+        
+        var userRole = _permissionService.GetUserRole(userId, chatId);
+        var context = new CommandContext
         {
-            case "/new" or "/clear":
-            {
-                _sessionStore.Delete(sessionId);
-                await pusher.PushTextAsync("会话已清除，开始新的对话。");
-                AnsiConsole.MarkupLine(
-                    $"[grey][[WeCom]][/] [green]Session cleared:[/] {Markup.Escape(sessionId)}");
-                return true;
-            }
-
-            case "/debug":
-            {
-                // Get user info from context
-                var context = WeComChatContextScope.Current;
-                if (context == null)
-                {
-                    await pusher.PushTextAsync("⚠️ 无法获取用户信息。");
-                    return true;
-                }
-
-                var userRole = _permissionService.GetUserRole(context.UserId, pusher.GetChatId());
-                if (userRole != WeComUserRole.Admin)
-                {
-                    await pusher.PushTextAsync("⚠️ 此命令仅管理员可用。");
-                    return true;
-                }
-
-                var newState = DebugModeService.Toggle();
-                var statusMsg = newState ? "✅ 调试模式已开启" : "✅ 调试模式已关闭";
-                await pusher.PushTextAsync(statusMsg);
-                
-                AnsiConsole.MarkupLine($"[grey][[WeCom]][/] [yellow]Debug mode {(newState ? "enabled" : "disabled")}[/] by [green]{Markup.Escape(context.UserName)}[/] (uid={context.UserId})");
-                return true;
-            }
-
-            case "/help":
-            {
-                var helpText = "可用命令：\n"
-                               + "/new 或 /clear - 清除当前会话\n"
-                               + "/debug - 切换调试模式（仅管理员）\n"
-                               + "/heartbeat trigger - 立即触发心跳\n"
-                               + "/cron list - 列出定时任务\n"
-                               + "/cron remove <id> - 删除定时任务\n"
-                               + "/help - 显示此帮助信息\n\n"
-                               + "直接输入问题即可与 DotBot 对话。";
-                await pusher.PushTextAsync(helpText);
-                return true;
-            }
-        }
-
-        if (cmd.StartsWith("/heartbeat"))
-        {
-            await HandleHeartbeatAsync(pusher, cmd);
-            return true;
-        }
-
-        if (cmd.StartsWith("/cron"))
-        {
-            await HandleCronAsync(pusher, cmd);
-            return true;
-        }
-
-        if (cmd.StartsWith("/"))
-        {
-            var msg = CommandHelper.FormatUnknownCommandMessage(text, KnownCommands);
-            await pusher.PushTextAsync(msg);
-            return true;
-        }
-
-        return false;
-    }
-
-    private static readonly string[] KnownCommands =
-    [
-        "/new", "/clear", "/debug", "/help", "/heartbeat", "/cron"
-    ];
-
-    private async Task HandleHeartbeatAsync(IWeComPusher pusher, string cmd)
-    {
-        if (_heartbeatService == null)
-        {
-            await pusher.PushTextAsync("心跳服务未启用。");
-            return;
-        }
-
-        var parts = cmd.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var subCmd = parts.Length > 1 ? parts[1] : "trigger";
-
-        if (subCmd == "trigger")
-        {
-            await pusher.PushTextAsync("正在触发心跳...");
-            var result = await _heartbeatService.TriggerNowAsync();
-            if (result != null)
-                await pusher.PushTextAsync($"心跳结果：\n{result}");
-            else
-                await pusher.PushTextAsync("没有心跳响应（HEARTBEAT.md 可能为空或不存在）。");
-        }
-        else
-        {
-            await pusher.PushTextAsync("用法：/heartbeat trigger");
-        }
-    }
-
-    private async Task HandleCronAsync(IWeComPusher pusher, string cmd)
-    {
-        if (_cronService == null)
-        {
-            await pusher.PushTextAsync("定时任务服务未启用。");
-            return;
-        }
-
-        var parts = cmd.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var subCmd = parts.Length > 1 ? parts[1] : "list";
-
-        switch (subCmd)
-        {
-            case "list":
-            {
-                var jobs = _cronService.ListJobs(includeDisabled: true);
-                if (jobs.Count == 0)
-                {
-                    await pusher.PushTextAsync("没有定时任务。");
-                    return;
-                }
-
-                var sb = new StringBuilder();
-                sb.AppendLine($"定时任务列表 ({jobs.Count})：");
-                foreach (var job in jobs)
-                {
-                    var status = job.Enabled ? "启用" : "禁用";
-                    var schedDesc = job.Schedule.Kind switch
-                    {
-                        "at" when job.Schedule.AtMs.HasValue =>
-                            $"一次性 {DateTimeOffset.FromUnixTimeMilliseconds(job.Schedule.AtMs.Value):u}",
-                        "every" when job.Schedule.EveryMs.HasValue =>
-                            $"每 {TimeSpan.FromMilliseconds(job.Schedule.EveryMs.Value)}",
-                        _ => job.Schedule.Kind
-                    };
-                    var next = job.State.NextRunAtMs.HasValue
-                        ? DateTimeOffset.FromUnixTimeMilliseconds(job.State.NextRunAtMs.Value).ToString("u")
-                        : "-";
-                    sb.AppendLine($"[{job.Id}] {job.Name} ({status})");
-                    sb.AppendLine($"  计划: {schedDesc}");
-                    sb.AppendLine($"  下次: {next}");
-                }
-
-                await pusher.PushTextAsync(sb.ToString().TrimEnd());
-                break;
-            }
-            case "remove":
-            {
-                if (parts.Length < 3)
-                {
-                    await pusher.PushTextAsync("用法：/cron remove <jobId>");
-                    break;
-                }
-
-                var jobId = parts[2];
-                if (_cronService.RemoveJob(jobId))
-                    await pusher.PushTextAsync($"任务 '{jobId}' 已删除。");
-                else
-                    await pusher.PushTextAsync($"任务 '{jobId}' 未找到。");
-                break;
-            }
-            default:
-                await pusher.PushTextAsync("用法：/cron list | /cron remove <id>");
-                break;
-        }
+            SessionId = sessionId,
+            RawText = text,
+            UserId = userId,
+            UserName = userName,
+            IsAdmin = userRole == WeComUserRole.Admin,
+            Source = "WeCom",
+            GroupId = chatId,
+            SessionStore = _sessionStore,
+            HeartbeatService = _heartbeatService,
+            CronService = _cronService,
+            AgentFactory = _agentFactory
+        };
+        
+        var responder = new WeComCommandResponder(pusher);
+        return await _commandDispatcher.TryDispatchAsync(text, context, responder);
     }
 
     #endregion

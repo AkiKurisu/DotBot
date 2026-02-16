@@ -4,6 +4,8 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using DotBot.Agents;
 using DotBot.CLI;
+using DotBot.Commands.ChannelAdapters;
+using DotBot.Commands.Core;
 using DotBot.Cron;
 using DotBot.DashBoard;
 using DotBot.Heartbeat;
@@ -37,6 +39,8 @@ public sealed class QQChannelAdapter : IAsyncDisposable
     private readonly TraceCollector? _traceCollector;
 
     private readonly TokenUsageStore? _tokenUsageStore;
+    
+    private readonly CommandDispatcher _commandDispatcher;
 
     private static readonly JsonSerializerOptions SerializerOptions = new() { WriteIndented = false, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     
@@ -62,6 +66,9 @@ public sealed class QQChannelAdapter : IAsyncDisposable
         _agentFactory = agentFactory;
         _traceCollector = traceCollector;
         _tokenUsageStore = tokenUsageStore;
+        
+        // Initialize command dispatcher with built-in handlers
+        _commandDispatcher = CommandDispatcher.CreateDefault();
 
         _client.OnGroupMessage += HandleGroupMessageAsync;
         _client.OnPrivateMessage += HandlePrivateMessageAsync;
@@ -303,169 +310,24 @@ public sealed class QQChannelAdapter : IAsyncDisposable
 
     private async Task<bool> HandleCommandAsync(OneBotMessageEvent evt, string text, string sessionId)
     {
-        var cmd = text.Trim().ToLowerInvariant();
-
-        switch (cmd)
+        var role = _permissionService.GetUserRole(evt.UserId, evt.GroupId);
+        var context = new CommandContext
         {
-            case "/new" or "/clear":
-            {
-                _sessionStore.Delete(sessionId);
-                _agentFactory?.RemoveTokenTracker(sessionId);
-                await _client.SendMessageAsync(evt, "会话已清除，开始新的对话。");
-                AnsiConsole.MarkupLine($"[grey][[QQ]][/] [green]Session cleared:[/] {Markup.Escape(sessionId)}");
-                return true;
-            }
-
-            case "/debug":
-            {
-                var role = _permissionService.GetUserRole(evt.UserId, evt.GroupId);
-                if (role != QQUserRole.Admin)
-                {
-                    await _client.SendMessageAsync(evt, "⚠️ 此命令仅管理员可用。");
-                    return true;
-                }
-
-                var newState = DebugModeService.Toggle();
-                var statusMsg = newState ? "✅ 调试模式已开启" : "✅ 调试模式已关闭";
-                await _client.SendMessageAsync(evt, statusMsg);
-                
-                var userName = evt.Sender.DisplayName;
-                var userId = evt.UserId;
-                AnsiConsole.MarkupLine($"[grey][[QQ]][/] [yellow]Debug mode {(newState ? "enabled" : "disabled")}[/] by [green]{Markup.Escape(userName)}[/] (uid={userId})");
-                return true;
-            }
-
-            case "/help":
-            {
-                var helpText = "可用命令：\n"
-                    + "/new 或 /clear - 清除当前会话\n"
-                    + "/debug - 切换调试模式（仅管理员）\n"
-                    + "/heartbeat trigger - 立即触发心跳检查\n"
-                    + "/cron list - 查看定时任务列表\n"
-                    + "/cron remove <id> - 删除定时任务\n"
-                    + "/help - 显示此帮助信息\n\n"
-                    + "直接输入问题即可与 DotBot 对话。";
-                await _client.SendMessageAsync(evt, helpText);
-                return true;
-            }
-        }
-
-        if (cmd.StartsWith("/heartbeat"))
-        {
-            await HandleHeartbeatAsync(evt, cmd);
-            return true;
-        }
-
-        if (cmd.StartsWith("/cron"))
-        {
-            await HandleCronAsync(evt, cmd);
-            return true;
-        }
-
-        if (cmd.StartsWith("/"))
-        {
-            var msg = CommandHelper.FormatUnknownCommandMessage(text, KnownCommands);
-            await _client.SendMessageAsync(evt, msg);
-            return true;
-        }
-
-        return false;
-    }
-
-    private static readonly string[] KnownCommands =
-    [
-        "/new", "/clear", "/debug", "/help", "/heartbeat", "/cron"
-    ];
-
-    private async Task HandleHeartbeatAsync(OneBotMessageEvent evt, string cmd)
-    {
-        if (_heartbeatService == null)
-        {
-            await _client.SendMessageAsync(evt, "心跳服务未启用。");
-            return;
-        }
-
-        var parts = cmd.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var subCmd = parts.Length > 1 ? parts[1] : "trigger";
-
-        if (subCmd == "trigger")
-        {
-            await _client.SendMessageAsync(evt, "正在触发心跳检查...");
-            var result = await _heartbeatService.TriggerNowAsync();
-            if (result != null)
-                await _client.SendMessageAsync(evt, $"心跳结果：\n{result}");
-            else
-                await _client.SendMessageAsync(evt, "无心跳响应（HEARTBEAT.md 可能不存在或为空）。");
-        }
-        else
-        {
-            await _client.SendMessageAsync(evt, "用法：/heartbeat trigger");
-        }
-    }
-
-    private async Task HandleCronAsync(OneBotMessageEvent evt, string cmd)
-    {
-        if (_cronService == null)
-        {
-            await _client.SendMessageAsync(evt, "定时任务服务未启用。");
-            return;
-        }
-
-        var parts = cmd.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var subCmd = parts.Length > 1 ? parts[1] : "list";
-
-        switch (subCmd)
-        {
-            case "list":
-            {
-                var jobs = _cronService.ListJobs(includeDisabled: true);
-                if (jobs.Count == 0)
-                {
-                    await _client.SendMessageAsync(evt, "暂无定时任务。");
-                    return;
-                }
-
-                var sb = new StringBuilder();
-                sb.AppendLine($"定时任务 ({jobs.Count})：");
-                foreach (var job in jobs)
-                {
-                    var status = job.Enabled ? "已启用" : "已禁用";
-                    var schedDesc = job.Schedule.Kind switch
-                    {
-                        "at" when job.Schedule.AtMs.HasValue =>
-                            $"once at {DateTimeOffset.FromUnixTimeMilliseconds(job.Schedule.AtMs.Value):u}",
-                        "every" when job.Schedule.EveryMs.HasValue =>
-                            $"every {TimeSpan.FromMilliseconds(job.Schedule.EveryMs.Value)}",
-                        _ => job.Schedule.Kind
-                    };
-                    var next = job.State.NextRunAtMs.HasValue
-                        ? DateTimeOffset.FromUnixTimeMilliseconds(job.State.NextRunAtMs.Value).ToString("u")
-                        : "-";
-                    sb.AppendLine($"[{job.Id}] {job.Name} ({status})");
-                    sb.AppendLine($"  计划：{schedDesc}");
-                    sb.AppendLine($"  下次执行：{next}");
-                }
-                await _client.SendMessageAsync(evt, sb.ToString().TrimEnd());
-                break;
-            }
-            case "remove":
-            {
-                if (parts.Length < 3)
-                {
-                    await _client.SendMessageAsync(evt, "用法：/cron remove <任务ID>");
-                    break;
-                }
-                var jobId = parts[2];
-                if (_cronService.RemoveJob(jobId))
-                    await _client.SendMessageAsync(evt, $"任务 '{jobId}' 已删除。");
-                else
-                    await _client.SendMessageAsync(evt, $"未找到任务 '{jobId}'。");
-                break;
-            }
-            default:
-                await _client.SendMessageAsync(evt, "用法：/cron list | /cron remove <任务ID>");
-                break;
-        }
+            SessionId = sessionId,
+            RawText = text,
+            UserId = evt.UserId.ToString(),
+            UserName = evt.Sender.DisplayName,
+            IsAdmin = role == QQUserRole.Admin,
+            Source = "QQ",
+            GroupId = evt.IsGroupMessage ? evt.GroupId.ToString() : null,
+            SessionStore = _sessionStore,
+            HeartbeatService = _heartbeatService,
+            CronService = _cronService,
+            AgentFactory = _agentFactory
+        };
+        
+        var responder = new QQCommandResponder(_client, evt);
+        return await _commandDispatcher.TryDispatchAsync(text, context, responder);
     }
 
     private static void LogIncoming(string type, string targetId, string sender, string text)

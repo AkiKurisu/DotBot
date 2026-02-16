@@ -1,15 +1,17 @@
 using System.ClientModel;
 using System.Collections.Concurrent;
+using DotBot.Abstractions;
 using DotBot.CLI;
 using DotBot.Context;
-using DotBot.Cron;
 using DotBot.DashBoard;
-using DotBot.Mcp;
 using DotBot.Memory;
 using DotBot.QQ;
 using DotBot.Security;
 using DotBot.Skills;
 using DotBot.Tools;
+using DotBot.Tools.Providers.Channels;
+using DotBot.Tools.Providers.Core;
+using DotBot.Tools.Providers.System;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using OpenAI;
@@ -17,44 +19,32 @@ using OpenAI.Chat;
 
 namespace DotBot.Agents;
 
+/// <summary>
+/// Factory for creating AI agents with tool aggregation from providers.
+/// Tools are aggregated from registered <see cref="IAgentToolProvider"/> instances.
+/// </summary>
 public sealed class AgentFactory
 {
     private readonly AppConfig _config;
-    
     private readonly MemoryStore _memoryStore;
-    
     private readonly SkillsLoader _skillsLoader;
-    
     private readonly string _cortexBotPath;
-    
     private readonly string _workspacePath;
-    
     private readonly ChatClient _chatClient;
-    
-    private readonly AgentTools _agentTools;
+    private readonly ContextCompactor? _contextCompactor;
+    private readonly ConcurrentDictionary<string, TokenTracker> _tokenTrackers = new();
+    private readonly TraceCollector? _traceCollector;
+    private readonly HashSet<string> _globalEnabledToolNames;
+    private readonly ToolProviderContext _toolProviderContext;
+    private readonly IReadOnlyList<IAgentToolProvider> _toolProviders;
 
-    private readonly FileTools _fileTools;
-
-    private readonly ShellTools _shellTools;
-
-    private readonly WebTools _webTools;
-
+    // Legacy fields for backward compatibility (WeComTools accessor)
     private readonly WeComTools? _weComTools;
 
-    private readonly QQTools? _qqTools;
-
-    private readonly CronTools? _cronTools;
-
-    private readonly ContextCompactor? _contextCompactor;
-
-    private readonly McpClientManager? _mcpClientManager;
-
-    private readonly ConcurrentDictionary<string, TokenTracker> _tokenTrackers = new();
-
-    private readonly TraceCollector? _traceCollector;
-
-    private readonly HashSet<string> _globalEnabledToolNames;
-
+    /// <summary>
+    /// Creates a new AgentFactory with tool providers.
+    /// This is the preferred constructor for the new provider-based architecture.
+    /// </summary>
     public AgentFactory(
         string cortexBotPath,
         string workspacePath,
@@ -62,10 +52,9 @@ public sealed class AgentFactory
         MemoryStore memoryStore,
         SkillsLoader skillsLoader,
         IApprovalService approvalService,
-        PathBlacklist? blacklist = null,
-        QQBotClient? qqBotClient = null,
-        CronTools? cronTools = null,
-        McpClientManager? mcpClientManager = null,
+        PathBlacklist? blacklist,
+        IEnumerable<IAgentToolProvider>? toolProviders,
+        ToolProviderContext? toolProviderContext = null,
         TraceCollector? traceCollector = null)
     {
         _config = config;
@@ -73,8 +62,6 @@ public sealed class AgentFactory
         _skillsLoader = skillsLoader;
         _cortexBotPath = cortexBotPath;
         _workspacePath = workspacePath;
-        _cronTools = cronTools;
-        _mcpClientManager = mcpClientManager;
         _traceCollector = traceCollector;
         _globalEnabledToolNames = ResolveGlobalEnabledToolNames(_config);
 
@@ -83,144 +70,119 @@ public sealed class AgentFactory
             Endpoint = new Uri(config.EndPoint)
         }).GetChatClient(_config.Model);
 
-        var subAgentManager = new SubAgentManager(
-            _chatClient, 
-            _workspacePath,
-            _config.SubagentMaxToolCallRounds,
-            maxConcurrency: _config.SubagentMaxConcurrency,
-            shellTimeout: _config.Tools.Shell.Timeout,
-            blacklist: blacklist);
-        _agentTools = new AgentTools(subAgentManager);
-        var userDotBotPath = Path.GetFullPath(Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".bot"));
-        _fileTools = new FileTools(
-            _workspacePath,
-            _config.Tools.File.RequireApprovalOutsideWorkspace, 
-            _config.Tools.File.MaxFileSize,
-            approvalService,
-            blacklist,
-            trustedReadPaths: [userDotBotPath]);
-        _shellTools = new ShellTools(
-            _workspacePath,
-            _config.Tools.Shell.Timeout, 
-            _config.Tools.Shell.RequireApprovalOutsideWorkspace,
-            _config.Tools.Shell.MaxOutputLength,
-            approvalService: approvalService,
-            blacklist: blacklist);
-        _webTools = new WebTools(
-            _config.Tools.Web.MaxChars,
-            _config.Tools.Web.Timeout,
-            _config.Tools.Web.SearchMaxResults,
-            _config.Tools.Web.SearchProvider);
-
         if (config.MaxContextTokens > 0)
             _contextCompactor = new ContextCompactor(_chatClient);
 
-        // Initialize WeCom tools if group webhook is configured or WeCom Bot is enabled
+        // Initialize WeCom tools for backward compatibility (WeComTools property accessor)
         if ((config.WeCom.Enabled && !string.IsNullOrWhiteSpace(config.WeCom.WebhookUrl)) || config.WeComBot.Enabled)
             _weComTools = new WeComTools(config.WeCom.WebhookUrl);
 
-        // Initialize QQ tools if client is available
-        if (qqBotClient != null)
-            _qqTools = new QQTools(qqBotClient);
+        // Build tool provider context
+        _toolProviderContext = toolProviderContext ?? new ToolProviderContext
+        {
+            Config = config,
+            ChatClient = _chatClient,
+            WorkspacePath = workspacePath,
+            BotPath = cortexBotPath,
+            MemoryStore = memoryStore,
+            SkillsLoader = skillsLoader,
+            ApprovalService = approvalService,
+            PathBlacklist = blacklist,
+            TraceCollector = traceCollector
+        };
 
-        // Initialize tool icon registry with all tool instances
-        var toolInstances = new List<object> { _agentTools, _fileTools, _shellTools, _webTools };
-        if (_weComTools != null) toolInstances.Add(_weComTools);
-        if (_qqTools != null) toolInstances.Add(_qqTools);
-        ToolIconRegistry.Initialize(toolInstances.ToArray());
+        // Use provided providers or build default set
+        _toolProviders = toolProviders != null
+            ? toolProviders.ToList()
+            : BuildDefaultToolProviders();
     }
 
+    /// <summary>
+    /// Gets the WeCom tools instance for direct access (used by Heartbeat service).
+    /// </summary>
     public WeComTools? WeComTools => _weComTools;
 
+    /// <summary>
+    /// Gets the last created tools for inspection.
+    /// </summary>
     public IReadOnlyList<AITool>? LastCreatedTools { get; private set; }
 
+    /// <summary>
+    /// Gets the context compactor for large conversations.
+    /// </summary>
     public ContextCompactor? Compactor => _contextCompactor;
 
+    /// <summary>
+    /// Gets the maximum context tokens from configuration.
+    /// </summary>
     public int MaxContextTokens => _config.MaxContextTokens;
 
+    /// <summary>
+    /// Gets or creates a token tracker for the specified session.
+    /// </summary>
     public TokenTracker GetOrCreateTokenTracker(string sessionKey)
     {
         return _tokenTrackers.GetOrAdd(sessionKey, _ => new TokenTracker());
     }
 
+    /// <summary>
+    /// Removes the token tracker for the specified session.
+    /// </summary>
     public void RemoveTokenTracker(string sessionKey)
     {
         _tokenTrackers.TryRemove(sessionKey, out _);
     }
 
+    /// <summary>
+    /// Creates default tools by aggregating all registered tool providers.
+    /// Tools are ordered by provider priority (lower priority value = earlier in list).
+    /// </summary>
     public List<AITool> CreateDefaultTools()
     {
-        var tools = new List<AITool>
-        {
-            AIFunctionFactory.Create(_agentTools.SpawnSubagent),
-            AIFunctionFactory.Create(_fileTools.ReadFile),
-            AIFunctionFactory.Create(_fileTools.WriteFile),
-            AIFunctionFactory.Create(_fileTools.EditFile),
-            AIFunctionFactory.Create(_fileTools.GrepFiles),
-            AIFunctionFactory.Create(_fileTools.FindFiles),
-            AIFunctionFactory.Create(_shellTools.Exec),
-            AIFunctionFactory.Create(_webTools.WebSearch),
-            AIFunctionFactory.Create(_webTools.WebFetch),
-        };
-
-        if (_cronTools != null)
-            tools.Add(AIFunctionFactory.Create(_cronTools.Cron));
-
-        if (_weComTools != null)
-        {
-            tools.Add(AIFunctionFactory.Create(_weComTools.WeComNotify));
-            tools.Add(AIFunctionFactory.Create(_weComTools.WeComSendVoice));
-            tools.Add(AIFunctionFactory.Create(_weComTools.WeComSendFile));
-        }
-
-        if (_qqTools != null)
-        {
-            tools.Add(AIFunctionFactory.Create(_qqTools.QQSendGroupVoice));
-            tools.Add(AIFunctionFactory.Create(_qqTools.QQSendPrivateVoice));
-            tools.Add(AIFunctionFactory.Create(_qqTools.QQSendGroupVideo));
-            tools.Add(AIFunctionFactory.Create(_qqTools.QQSendPrivateVideo));
-            tools.Add(AIFunctionFactory.Create(_qqTools.QQUploadGroupFile));
-            tools.Add(AIFunctionFactory.Create(_qqTools.QQUploadPrivateFile));
-        }
-
-        if (_mcpClientManager != null)
-        {
-            foreach (var mcpTool in _mcpClientManager.Tools)
-                tools.Add(mcpTool);
-        }
-
-        if (_globalEnabledToolNames.Count == 0)
-            return tools;
-
-        return tools
-            .Where(t => _globalEnabledToolNames.Contains(t.Name))
+        var tools = _toolProviders
+            .OrderBy(p => p.Priority)
+            .SelectMany(p => p.CreateTools(_toolProviderContext))
             .ToList();
+
+        // Apply global tool filtering if configured
+        if (_globalEnabledToolNames.Count > 0)
+        {
+            tools = tools
+                .Where(t => _globalEnabledToolNames.Contains(t.Name))
+                .ToList();
+        }
+
+        // Initialize tool icon registry with tool instances for icon mapping
+        InitializeToolIconRegistry();
+
+        return tools;
     }
 
+    /// <summary>
+    /// Creates tools filtered by the specified enabled tool names.
+    /// </summary>
     public List<AITool> CreateFilteredTools(IReadOnlyList<string> enabledToolNames)
     {
         var allTools = CreateDefaultTools();
         if (enabledToolNames.Count == 0)
             return allTools;
 
-        var filtered = allTools.Where(t =>
-            enabledToolNames.Contains(t.Name, StringComparer.OrdinalIgnoreCase)).ToList();
-        return filtered;
+        return allTools
+            .Where(t => enabledToolNames.Contains(t.Name, StringComparer.OrdinalIgnoreCase))
+            .ToList();
     }
 
-    private static HashSet<string> ResolveGlobalEnabledToolNames(AppConfig config)
-    {
-        return config.EnabledTools.Count == 0
-            ? []
-            : new HashSet<string>(config.EnabledTools, StringComparer.OrdinalIgnoreCase);
-    }
-
+    /// <summary>
+    /// Creates the default AI agent with all registered tools.
+    /// </summary>
     public AIAgent CreateDefaultAgent()
     {
         return CreateAgentWithTools(CreateDefaultTools());
     }
 
+    /// <summary>
+    /// Creates an AI agent with the specified tools.
+    /// </summary>
     public AIAgent CreateAgentWithTools(List<AITool> tools)
     {
         LastCreatedTools = tools;
@@ -255,6 +217,9 @@ public sealed class AgentFactory
         return configuredChatClient.AsAIAgent(options);
     }
 
+    /// <summary>
+    /// Creates a tracing chat client for debugging and monitoring.
+    /// </summary>
     public IChatClient CreateTracingChatClient(TraceCollector? traceCollector = null)
     {
         var chatClientBuilder = new ChatClientBuilder(_chatClient.AsIChatClient());
@@ -268,5 +233,73 @@ public sealed class AgentFactory
             MaximumIterationsPerRequest = _config.MaxToolCallRounds
         });
         return chatClientBuilder.Build();
+    }
+
+    private static HashSet<string> ResolveGlobalEnabledToolNames(AppConfig config)
+    {
+        return config.EnabledTools.Count == 0
+            ? []
+            : new HashSet<string>(config.EnabledTools, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static List<IAgentToolProvider> BuildDefaultToolProviders()
+    {
+        // All providers self-check availability in CreateTools()
+        // No need for conditional logic here - providers return empty list when not applicable
+        return
+        [
+            new CoreToolProvider(),
+            new WeComToolProvider(),
+            new QQToolProvider(),
+            new CronToolProvider(),
+            new McpToolProvider()
+        ];
+    }
+
+    private void InitializeToolIconRegistry()
+    {
+        // Build tool instances for icon registry (for backward compatibility)
+        var userDotBotPath = Path.GetFullPath(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".bot"));
+
+        var subAgentManager = new SubAgentManager(
+            _chatClient,
+            _workspacePath,
+            _config.SubagentMaxToolCallRounds,
+            maxConcurrency: _config.SubagentMaxConcurrency,
+            shellTimeout: _config.Tools.Shell.Timeout,
+            blacklist: _toolProviderContext.PathBlacklist);
+
+        var toolInstances = new List<object>
+        {
+            new AgentTools(subAgentManager),
+            new FileTools(
+                _workspacePath,
+                _config.Tools.File.RequireApprovalOutsideWorkspace,
+                _config.Tools.File.MaxFileSize,
+                _toolProviderContext.ApprovalService,
+                _toolProviderContext.PathBlacklist,
+                trustedReadPaths: [userDotBotPath]),
+            new ShellTools(
+                _workspacePath,
+                _config.Tools.Shell.Timeout,
+                _config.Tools.Shell.RequireApprovalOutsideWorkspace,
+                _config.Tools.Shell.MaxOutputLength,
+                approvalService: _toolProviderContext.ApprovalService,
+                blacklist: _toolProviderContext.PathBlacklist),
+            new WebTools(
+                _config.Tools.Web.MaxChars,
+                _config.Tools.Web.Timeout,
+                _config.Tools.Web.SearchMaxResults,
+                _config.Tools.Web.SearchProvider)
+        };
+
+        if (_weComTools != null)
+            toolInstances.Add(_weComTools);
+
+        if (_toolProviderContext.ChannelClient is QQBotClient qqClient)
+            toolInstances.Add(new QQTools(qqClient));
+
+        ToolIconRegistry.Initialize(toolInstances.ToArray());
     }
 }

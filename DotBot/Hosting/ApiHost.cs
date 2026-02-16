@@ -1,6 +1,9 @@
+using System.ClientModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
+using DotBot.Abstractions;
 using DotBot.Agents;
+using DotBot.Api.Factories;
 using DotBot.CLI;
 using DotBot.Context;
 using DotBot.Cron;
@@ -18,6 +21,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Hosting;
+using OpenAI;
 using Spectre.Console;
 
 namespace DotBot.Hosting;
@@ -44,14 +48,39 @@ public sealed class ApiHost(
         var traceStore = sp.GetService<TraceStore>();
         var tokenUsageStore = sp.GetService<TokenUsageStore>();
 
-        var approvalMode = ApiApprovalService.ParseMode(config.Api.ApprovalMode, config.Api.AutoApprove);
-        _approvalService = new ApiApprovalService(approvalMode, config.Api.ApprovalTimeoutSeconds);
+        // Use factory to create approval service
+        var approvalContext = new ApprovalServiceContext
+        {
+            Config = config,
+            WorkspacePath = paths.WorkspacePath,
+            ApprovalMode = config.Api.ApprovalMode,
+            AutoApprove = config.Api.AutoApprove,
+            ApprovalTimeoutSeconds = config.Api.ApprovalTimeoutSeconds
+        };
+        var approvalFactory = new ApiApprovalServiceFactory();
+        _approvalService = (ApiApprovalService)approvalFactory.Create(approvalContext);
 
         _agentFactory = new AgentFactory(
             paths.BotPath, paths.WorkspacePath, config,
             memoryStore, skillsLoader, _approvalService, blacklist,
-            cronTools: cronTools,
-            mcpClientManager: mcpClientManager.Tools.Count > 0 ? mcpClientManager : null,
+            toolProviders: null,
+            toolProviderContext: new ToolProviderContext
+            {
+                Config = config,
+                ChatClient = new OpenAIClient(new ApiKeyCredential(config.ApiKey), new OpenAIClientOptions
+                {
+                    Endpoint = new Uri(config.EndPoint)
+                }).GetChatClient(config.Model),
+                WorkspacePath = paths.WorkspacePath,
+                BotPath = paths.BotPath,
+                MemoryStore = memoryStore,
+                SkillsLoader = skillsLoader,
+                ApprovalService = _approvalService,
+                PathBlacklist = blacklist,
+                CronTools = cronTools,
+                McpClientManager = mcpClientManager.Tools.Count > 0 ? mcpClientManager : null,
+                TraceCollector = traceCollector
+            },
             traceCollector: traceCollector);
 
         var tools = _agentFactory.CreateDefaultTools();
@@ -171,6 +200,7 @@ public sealed class ApiHost(
         AnsiConsole.MarkupLine("[grey]  GET  /v1/sessions[/]");
         AnsiConsole.MarkupLine("[grey]  DELETE /v1/sessions/{id}[/]");
 
+        var approvalMode = ApiApprovalService.ParseMode(config.Api.ApprovalMode, config.Api.AutoApprove);
         if (approvalMode == ApiApprovalMode.Interactive)
         {
             AnsiConsole.MarkupLine("[grey]  GET  /v1/approvals[/]");

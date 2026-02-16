@@ -1,3 +1,5 @@
+using System.ClientModel;
+using DotBot.Abstractions;
 using DotBot.Agents;
 using DotBot.Cron;
 using DotBot.DashBoard;
@@ -7,8 +9,10 @@ using DotBot.Memory;
 using DotBot.Security;
 using DotBot.Skills;
 using DotBot.WeCom;
+using DotBot.WeCom.Factories;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
+using OpenAI;
 using Spectre.Console;
 
 namespace DotBot.Hosting;
@@ -31,43 +35,48 @@ public sealed class WeComBotHost(
         var traceStore = sp.GetService<TraceStore>();
         var tokenUsageStore = sp.GetService<TokenUsageStore>();
 
-        var registry = new WeComBotRegistry();
-
-        foreach (var robotConfig in config.WeComBot.Robots)
+        // Use factories to create channel-specific clients and services
+        var moduleContext = new ModuleContext
         {
-            if (string.IsNullOrEmpty(robotConfig.Token) || string.IsNullOrEmpty(robotConfig.AesKey))
-            {
-                AnsiConsole.MarkupLine(
-                    $"[yellow]Skipping WeCom bot {Markup.Escape(robotConfig.Path)}: Token or AesKey is empty[/]");
-                continue;
-            }
+            Config = config,
+            Paths = paths,
+            ServiceProvider = sp
+        };
 
-            registry.Register(
-                path: robotConfig.Path,
-                token: robotConfig.Token,
-                encodingAesKey: robotConfig.AesKey);
-        }
+        var registry = WeComClientFactory.CreateRegistry(moduleContext);
+        var wecomPermissionService = WeComClientFactory.CreatePermissionService(moduleContext);
 
-        if (config.WeComBot.DefaultRobot != null &&
-            !string.IsNullOrEmpty(config.WeComBot.DefaultRobot.Token) &&
-            !string.IsNullOrEmpty(config.WeComBot.DefaultRobot.AesKey))
+        var approvalContext = new ApprovalServiceContext
         {
-            AnsiConsole.MarkupLine("[grey][[WeCom]][/] [green]Default robot configured[/]");
-        }
-
-        var wecomPermissionService = new WeComPermissionService(
-            config.WeComBot.AdminUsers,
-            config.WeComBot.WhitelistedUsers,
-            config.WeComBot.WhitelistedChats);
-
-        var wecomApprovalService = new WeComApprovalService(
-            wecomPermissionService, config.WeComBot.ApprovalTimeoutSeconds);
+            Config = config,
+            WorkspacePath = paths.WorkspacePath,
+            PermissionService = wecomPermissionService,
+            ApprovalTimeoutSeconds = config.WeComBot.ApprovalTimeoutSeconds
+        };
+        var approvalFactory = new WeComApprovalServiceFactory();
+        var wecomApprovalService = (WeComApprovalService)approvalFactory.Create(approvalContext);
 
         var agentFactory = new AgentFactory(
             paths.BotPath, paths.WorkspacePath, config,
             memoryStore, skillsLoader, wecomApprovalService, blacklist,
-            cronTools: cronTools,
-            mcpClientManager: mcpClientManager.Tools.Count > 0 ? mcpClientManager : null,
+            toolProviders: null,
+            toolProviderContext: new ToolProviderContext
+            {
+                Config = config,
+                ChatClient = new OpenAIClient(new ApiKeyCredential(config.ApiKey), new OpenAIClientOptions
+                {
+                    Endpoint = new Uri(config.EndPoint)
+                }).GetChatClient(config.Model),
+                WorkspacePath = paths.WorkspacePath,
+                BotPath = paths.BotPath,
+                MemoryStore = memoryStore,
+                SkillsLoader = skillsLoader,
+                ApprovalService = wecomApprovalService,
+                PathBlacklist = blacklist,
+                CronTools = cronTools,
+                McpClientManager = mcpClientManager.Tools.Count > 0 ? mcpClientManager : null,
+                TraceCollector = traceCollector
+            },
             traceCollector: traceCollector);
 
         var agent = agentFactory.CreateDefaultAgent();
@@ -124,6 +133,7 @@ public sealed class WeComBotHost(
             wecomPermissionService, wecomApprovalService,
             heartbeatService: heartbeatService,
             cronService: cronService,
+            agentFactory: agentFactory,
             traceCollector: traceCollector,
             tokenUsageStore: tokenUsageStore);
 

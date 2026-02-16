@@ -3,6 +3,7 @@ using DotBot;
 using DotBot.CLI;
 using DotBot.Hosting;
 using DotBot.Localization;
+using DotBot.Startup;
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
 
@@ -85,22 +86,27 @@ if (string.IsNullOrWhiteSpace(config.ApiKey))
     return;
 }
 
-await using var provider = new ServiceCollection()
-    .AddDotBot(config, workspacePath, botPath)
-    .AddSingleton<IDotBotHost>(config switch
-    {
-        { QQBot.Enabled: true } => sp => ActivatorUtilities.CreateInstance<QQBotHost>(sp),
-        { WeComBot.Enabled: true } => sp => ActivatorUtilities.CreateInstance<WeComBotHost>(sp),
-        { Api.Enabled: true } => sp => ActivatorUtilities.CreateInstance<ApiHost>(sp),
-        _ => sp => ActivatorUtilities.CreateInstance<CliHost>(sp)
-    })
-    .BuildServiceProvider();
+// Create module registry and startup orchestrator
+var paths = new DotBotPaths
+{
+    WorkspacePath = workspacePath,
+    BotPath = botPath
+};
+
+var moduleRegistry = ServiceRegistration.CreateModuleRegistry();
+var orchestrator = new StartupOrchestrator(moduleRegistry, config, paths);
+
+// Create service collection with core services
+var services = new ServiceCollection()
+    .AddDotBot(config, workspacePath, botPath);
+
+// Select module and create host
+var (provider, host) = orchestrator.SelectAndCreateHost(services);
 
 await provider.InitializeServicesAsync();
 
 try
 {
-    var host = provider.GetRequiredService<IDotBotHost>();
     await using (host)
     {
         await host.RunAsync();
