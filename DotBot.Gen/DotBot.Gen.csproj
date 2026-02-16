@@ -4,11 +4,11 @@
     <TargetFramework>netstandard2.0</TargetFramework>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
-    <RootNamespace>DotBot.Modules.Gen</RootNamespace>
+    <RootNamespace>DotBot.Gen</RootNamespace>
     <Description>Source generator for automatic DotBot module discovery</Description>
     
     <!-- NuGet package metadata -->
-    <PackageId>DotBot.Modules.Gen</PackageId>
+    <PackageId>DotBot.Gen</PackageId>
     <PackageVersion>1.0.0</PackageVersion>
     <Authors>DotBot</Authors>
     

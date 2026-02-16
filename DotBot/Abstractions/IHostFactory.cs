@@ -9,11 +9,6 @@ namespace DotBot.Abstractions;
 public interface IHostFactory
 {
     /// <summary>
-    /// Gets the mode name this factory creates hosts for (e.g., "cli", "api", "qq", "wecom").
-    /// </summary>
-    string ModeName { get; }
-
-    /// <summary>
     /// Creates a host instance.
     /// </summary>
     /// <param name="serviceProvider">The service provider for resolving dependencies.</param>

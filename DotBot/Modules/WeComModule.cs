@@ -9,14 +9,8 @@ namespace DotBot.Modules;
 /// Priority: 20
 /// </summary>
 [DotBotModule("wecom", Priority = 20, Description = "WeCom (Enterprise WeChat) module for enterprise messaging platform interaction")]
-public sealed class WeComModule : ModuleBase
+public sealed partial class WeComModule : ModuleBase
 {
-    /// <inheritdoc />
-    public override string Name => "wecom";
-
-    /// <inheritdoc />
-    public override int Priority => 20;
-
     /// <inheritdoc />
     public override bool IsEnabled(AppConfig config)
     {
@@ -38,9 +32,6 @@ public sealed class WeComModule : ModuleBase
 [HostFactory("wecom")]
 public sealed class WeComHostFactory : IHostFactory
 {
-    /// <inheritdoc />
-    public string ModeName => "wecom";
-
     /// <inheritdoc />
     public IDotBotHost CreateHost(IServiceProvider serviceProvider, ModuleContext context)
     {

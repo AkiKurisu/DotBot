@@ -9,14 +9,8 @@ namespace DotBot.Modules;
 /// Priority: 30 (highest)
 /// </summary>
 [DotBotModule("qq", Priority = 30, Description = "QQ Bot module for QQ platform interaction via OneBot protocol")]
-public sealed class QQModule : ModuleBase
+public sealed partial class QQModule : ModuleBase
 {
-    /// <inheritdoc />
-    public override string Name => "qq";
-
-    /// <inheritdoc />
-    public override int Priority => 30;
-
     /// <inheritdoc />
     public override bool IsEnabled(AppConfig config)
     {
@@ -38,9 +32,6 @@ public sealed class QQModule : ModuleBase
 [HostFactory("qq")]
 public sealed class QQHostFactory : IHostFactory
 {
-    /// <inheritdoc />
-    public string ModeName => "qq";
-
     /// <inheritdoc />
     public IDotBotHost CreateHost(IServiceProvider serviceProvider, ModuleContext context)
     {

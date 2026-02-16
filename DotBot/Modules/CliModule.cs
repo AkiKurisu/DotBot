@@ -10,14 +10,8 @@ namespace DotBot.Modules;
 /// Priority: 0 (lowest - used as fallback)
 /// </summary>
 [DotBotModule("cli", Priority = 0, Description = "CLI module for interactive console-based interaction (default fallback)")]
-public sealed class CliModule : ModuleBase
+public sealed partial class CliModule : ModuleBase
 {
-    /// <inheritdoc />
-    public override string Name => "cli";
-
-    /// <inheritdoc />
-    public override int Priority => 0;
-
     /// <inheritdoc />
     public override bool IsEnabled(AppConfig config)
     {
@@ -40,9 +34,6 @@ public sealed class CliModule : ModuleBase
 [HostFactory("cli")]
 public sealed class CliHostFactory : IHostFactory
 {
-    /// <inheritdoc />
-    public string ModeName => "cli";
-
     /// <inheritdoc />
     public IDotBotHost CreateHost(IServiceProvider serviceProvider, ModuleContext context)
     {

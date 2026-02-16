@@ -38,21 +38,6 @@ public sealed class StartupOrchestrator
     }
 
     /// <summary>
-    /// Creates the service collection with all module services configured.
-    /// </summary>
-    /// <returns>The configured service collection.</returns>
-    public IServiceCollection CreateServiceCollection()
-    {
-        var services = new ServiceCollection();
-        
-        // Add core services
-        services.AddSingleton(_config);
-        services.AddSingleton(_paths);
-        
-        return services;
-    }
-
-    /// <summary>
     /// Configures services for the selected module.
     /// </summary>
     /// <param name="services">The service collection to configure.</param>

@@ -41,10 +41,9 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
-  <!-- Source Generator and Abstractions Reference -->
+  <!-- Source Generator Reference -->
   <ItemGroup>
-    <ProjectReference Include="..\DotBot.Modules\DotBot.Modules.csproj" />
-    <ProjectReference Include="..\DotBot.Modules.Gen\DotBot.Modules.Gen.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\DotBot.Gen\DotBot.Gen.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

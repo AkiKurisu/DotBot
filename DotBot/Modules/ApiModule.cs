@@ -9,14 +9,8 @@ namespace DotBot.Modules;
 /// Priority: 10
 /// </summary>
 [DotBotModule("api", Priority = 10, Description = "API module for OpenAI-compatible HTTP API interaction")]
-public sealed class ApiModule : ModuleBase
+public sealed partial class ApiModule : ModuleBase
 {
-    /// <inheritdoc />
-    public override string Name => "api";
-
-    /// <inheritdoc />
-    public override int Priority => 10;
-
     /// <inheritdoc />
     public override bool IsEnabled(AppConfig config)
     {
@@ -38,9 +32,6 @@ public sealed class ApiModule : ModuleBase
 [HostFactory("api")]
 public sealed class ApiHostFactory : IHostFactory
 {
-    /// <inheritdoc />
-    public string ModeName => "api";
-
     /// <inheritdoc />
     public IDotBotHost CreateHost(IServiceProvider serviceProvider, ModuleContext context)
     {

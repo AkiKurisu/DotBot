@@ -8,7 +8,7 @@ namespace DotBot.Abstractions;
 public abstract class ModuleBase : IDotBotModule
 {
     /// <inheritdoc />
-    public abstract string Name { get; }
+    public virtual string Name => "";
 
     /// <inheritdoc />
     public virtual int Priority => 0;
