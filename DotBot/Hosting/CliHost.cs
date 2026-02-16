@@ -2,6 +2,7 @@ using System.ClientModel;
 using DotBot.Abstractions;
 using DotBot.Agents;
 using DotBot.CLI;
+using DotBot.Configuration;
 using DotBot.Cron;
 using DotBot.DashBoard;
 using DotBot.Heartbeat;

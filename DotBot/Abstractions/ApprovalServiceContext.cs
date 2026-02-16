@@ -1,3 +1,4 @@
+using DotBot.Configuration;
 using DotBot.Security;
 
 namespace DotBot.Abstractions;

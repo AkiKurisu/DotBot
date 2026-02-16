@@ -1,3 +1,4 @@
+using DotBot.Configuration;
 using DotBot.Cron;
 using DotBot.DashBoard;
 using DotBot.Mcp;

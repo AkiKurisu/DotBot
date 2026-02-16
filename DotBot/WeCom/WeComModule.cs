@@ -1,4 +1,5 @@
 using DotBot.Abstractions;
+using DotBot.Configuration;
 using DotBot.Hosting;
 using DotBot.WeCom;
 using DotBot.WeCom.Factories;

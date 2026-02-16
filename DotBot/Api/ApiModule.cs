@@ -1,5 +1,6 @@
 using DotBot.Abstractions;
 using DotBot.Api.Factories;
+using DotBot.Configuration;
 using DotBot.Hosting;
 using DotBot.Modules;
 using Microsoft.Extensions.DependencyInjection;

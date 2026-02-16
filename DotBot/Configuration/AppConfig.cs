@@ -3,7 +3,7 @@ using System.Text.Json.Nodes;
 using DotBot.Localization;
 using DotBot.Mcp;
 
-namespace DotBot;
+namespace DotBot.Configuration;
 
 public sealed class AppConfig
 {

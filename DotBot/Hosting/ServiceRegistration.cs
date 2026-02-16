@@ -1,5 +1,5 @@
 using DotBot.Configuration;
-using DotBot.Configuration.Core;
+using DotBot.Configuration.Validators;
 using DotBot.Cron;
 using DotBot.DashBoard;
 using DotBot.Localization;
@@ -40,8 +40,8 @@ public static class ServiceRegistration
 
         services.AddSingleton<McpClientManager>();
 
-        // Register module configurations
-        services.AddModuleConfigurations(config);
+        // Register configuration validation
+        services.AddConfigurationValidation();
 
         if (config.DashBoard.Enabled)
         {
@@ -72,18 +72,12 @@ public static class ServiceRegistration
     /// <summary>
     /// Validates module configurations and prints diagnostics.
     /// </summary>
-    /// <param name="services">The service collection.</param>
     /// <param name="config">The application configuration.</param>
     /// <returns>True if all configurations are valid.</returns>
-    public static bool ValidateConfigurations(this IServiceCollection services, AppConfig config)
+    public static bool ValidateConfigurations(AppConfig config)
     {
-        var provider = new ModuleConfigProvider(config);
-        provider.RegisterBinder<Configuration.Modules.QQModuleConfig, Configuration.Binders.QQModuleConfigBinder>();
-        provider.RegisterBinder<Configuration.Modules.WeComModuleConfig, Configuration.Binders.WeComModuleConfigBinder>();
-        provider.RegisterBinder<Configuration.Modules.ApiModuleConfig, Configuration.Binders.ApiModuleConfigBinder>();
-        provider.RegisterBinder<Configuration.Modules.CliModuleConfig, Configuration.Binders.CliModuleConfigBinder>();
-
-        var validationResults = provider.ValidateAll();
+        var validator = new ConfigValidator();
+        var validationResults = validator.ValidateAll(config);
         if (validationResults.Count > 0)
         {
             foreach (var (section, errors) in validationResults)
@@ -97,27 +91,36 @@ public static class ServiceRegistration
         }
         return true;
     }
+}
 
-    extension(IServiceProvider provider)
+/// <summary>
+/// Extension methods for IServiceProvider.
+/// </summary>
+public static class ServiceProviderExtensions
+{
+    /// <summary>
+    /// Initializes async services.
+    /// </summary>
+    public static async Task InitializeServicesAsync(this IServiceProvider provider)
     {
-        public async Task InitializeServicesAsync()
+        var config = provider.GetRequiredService<AppConfig>();
+        var mcpManager = provider.GetRequiredService<McpClientManager>();
+        if (config.McpServers.Count > 0)
         {
-            var config = provider.GetRequiredService<AppConfig>();
-            var mcpManager = provider.GetRequiredService<McpClientManager>();
-            if (config.McpServers.Count > 0)
-            {
-                await mcpManager.ConnectAsync(config.McpServers);
-            }
+            await mcpManager.ConnectAsync(config.McpServers);
         }
+    }
 
-        public async ValueTask DisposeServicesAsync()
-        {
-            var cronService = provider.GetRequiredService<CronService>();
-            cronService.Stop();
-            cronService.Dispose();
+    /// <summary>
+    /// Disposes async services.
+    /// </summary>
+    public static async ValueTask DisposeServicesAsync(this IServiceProvider provider)
+    {
+        var cronService = provider.GetRequiredService<CronService>();
+        cronService.Stop();
+        cronService.Dispose();
 
-            var mcpManager = provider.GetRequiredService<McpClientManager>();
-            await mcpManager.DisposeAsync();
-        }
+        var mcpManager = provider.GetRequiredService<McpClientManager>();
+        await mcpManager.DisposeAsync();
     }
 }

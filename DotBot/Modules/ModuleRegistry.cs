@@ -1,4 +1,5 @@
 using DotBot.Abstractions;
+using DotBot.Configuration;
 using Spectre.Console;
 
 namespace DotBot.Modules;

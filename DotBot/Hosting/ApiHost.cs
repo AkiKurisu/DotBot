@@ -5,6 +5,7 @@ using DotBot.Abstractions;
 using DotBot.Agents;
 using DotBot.Api;
 using DotBot.CLI;
+using DotBot.Configuration;
 using DotBot.Context;
 using DotBot.Cron;
 using DotBot.DashBoard;

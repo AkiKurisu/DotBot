@@ -1,3 +1,4 @@
+using DotBot.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DotBot.Abstractions;

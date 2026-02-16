@@ -1,4 +1,5 @@
 using DotBot.Abstractions;
+using DotBot.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
 using ModuleRegistry = DotBot.Modules.ModuleRegistry;

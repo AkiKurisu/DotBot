@@ -2,6 +2,7 @@ using System.ClientModel;
 using System.Collections.Concurrent;
 using DotBot.Abstractions;
 using DotBot.CLI;
+using DotBot.Configuration;
 using DotBot.Context;
 using DotBot.DashBoard;
 using DotBot.Memory;
