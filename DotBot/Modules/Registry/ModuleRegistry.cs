@@ -1,4 +1,3 @@
-using System.Reflection;
 using DotBot.Abstractions;
 using Spectre.Console;
 
@@ -9,16 +8,11 @@ namespace DotBot.Modules.Registry;
 /// Provides module discovery, registration, and selection capabilities.
 /// Supports both source generator and reflection-based discovery.
 /// </summary>
-public sealed class ModuleRegistry
+public sealed partial class ModuleRegistry
 {
     private readonly List<IDotBotModule> _modules = [];
-    private readonly Dictionary<string, IHostFactory> _hostFactories = new();
-    private readonly string _discoveryMode;
 
-    /// <summary>
-    /// Gets the discovery mode used to find modules.
-    /// </summary>
-    public string DiscoveryMode => _discoveryMode;
+    private readonly Dictionary<string, IHostFactory> _hostFactories = new();
 
     /// <summary>
     /// Gets all registered modules.
@@ -28,120 +22,27 @@ public sealed class ModuleRegistry
     /// <summary>
     /// Creates a new module registry and discovers modules.
     /// </summary>
-    /// <param name="forceReflection">If true, forces reflection-based discovery even if source generator is available.</param>
-    public ModuleRegistry(bool forceReflection = false)
+    public ModuleRegistry()
     {
-        if (forceReflection)
-        {
-            _discoveryMode = "Reflection (forced)";
-            DiscoverModulesViaReflection();
-        }
-        else
-        {
-            // Try source generator first
-            var provider = CreateSourceGeneratorProvider();
-            if (provider != null)
-            {
-                _discoveryMode = "SourceGenerator";
-                DiscoverModulesViaSourceGenerator(provider);
-            }
-            else
-            {
-                _discoveryMode = "Reflection (fallback)";
-                DiscoverModulesViaReflection();
-            }
-        }
+        RegisterSourceGeneratedModules();
     }
+
+    // Partial method - will be implemented by source generator if modules are found
+    // If not implemented, the call is removed by compiler and we fall back to reflection
+    partial void RegisterSourceGeneratedModules();
 
     /// <summary>
-    /// Attempts to create the source-generated registration provider.
+    /// Registers a module and its optional host factory.
+    /// Called by the source-generated partial method.
     /// </summary>
-    private static IModuleRegistrationProvider? CreateSourceGeneratorProvider()
+    private void AddModule(IDotBotModule module, IHostFactory? hostFactory)
     {
-        try
+        _modules.Add(module);
+        if (hostFactory != null)
         {
-            // Look for the generated provider in the Generated namespace
-            var assembly = Assembly.GetExecutingAssembly();
-            var providerType = assembly.GetType("DotBot.Generated.ModuleRegistrationProvider");
-            
-            if (providerType != null && typeof(IModuleRegistrationProvider).IsAssignableFrom(providerType))
-            {
-                return Activator.CreateInstance(providerType) as IModuleRegistrationProvider;
-            }
-        }
-        catch
-        {
-            // Source generator not available, fall back to reflection
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Discovers modules using the source-generated provider.
-    /// </summary>
-    private void DiscoverModulesViaSourceGenerator(IModuleRegistrationProvider provider)
-    {
-        var registrations = provider.GetRegistrations();
-        foreach (var registration in registrations)
-        {
-            if (registration.Module is IDotBotModule module)
-            {
-                _modules.Add(module);
-            }
-            if (registration.HostFactory is IHostFactory factory)
-            {
-                _hostFactories[registration.Name] = factory;
-            }
+            _hostFactories[module.Name] = hostFactory;
         }
     }
-
-    /// <summary>
-    /// Discovers modules using reflection (fallback mode).
-    /// </summary>
-    private void DiscoverModulesViaReflection()
-    {
-        var assembly = Assembly.GetExecutingAssembly();
-
-        // Find all types implementing IDotBotModule
-        var moduleTypes = assembly.GetTypes()
-            .Where(t => typeof(IDotBotModule).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
-
-        foreach (var moduleType in moduleTypes)
-        {
-            try
-            {
-                if (Activator.CreateInstance(moduleType) is IDotBotModule module)
-                {
-                    _modules.Add(module);
-                }
-            }
-            catch
-            {
-                // Skip modules that cannot be instantiated
-            }
-        }
-
-        // Find all types implementing IHostFactory
-        var factoryTypes = assembly.GetTypes()
-            .Where(t => typeof(IHostFactory).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
-
-        foreach (var factoryType in factoryTypes)
-        {
-            try
-            {
-                if (Activator.CreateInstance(factoryType) is IHostFactory factory)
-                {
-                    _hostFactories[factory.ModeName] = factory;
-                }
-            }
-            catch
-            {
-                // Skip factories that cannot be instantiated
-            }
-        }
-    }
-
     /// <summary>
     /// Registers a module with its optional host factory (manual registration).
     /// </summary>
@@ -188,7 +89,7 @@ public sealed class ModuleRegistry
     /// <returns>The host factory, or null if not found.</returns>
     public IHostFactory? GetHostFactory(string moduleName)
     {
-        return _hostFactories.TryGetValue(moduleName, out var factory) ? factory : null;
+        return _hostFactories.GetValueOrDefault(moduleName);
     }
 
     /// <summary>
@@ -197,8 +98,6 @@ public sealed class ModuleRegistry
     /// <param name="config">The application configuration.</param>
     public void PrintDiagnostics(AppConfig config)
     {
-        AnsiConsole.MarkupLine($"[grey][[ModuleRegistry]][/] [green]Module diagnostics (discovery: {_discoveryMode}):[/]");
-
         // Print all registered modules
         AnsiConsole.MarkupLine("[grey]  Registered modules:[/]");
         foreach (var module in _modules.OrderBy(m => m.Name))

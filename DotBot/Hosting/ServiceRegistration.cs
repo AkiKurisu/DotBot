@@ -15,12 +15,6 @@ namespace DotBot.Hosting;
 
 public static class ServiceRegistration
 {
-    /// <summary>
-    /// Gets or sets a value indicating whether to force reflection-based module discovery.
-    /// When true, skips source generator and uses reflection fallback.
-    /// </summary>
-    public static bool ForceReflectionDiscovery { get; set; } = false;
-
     public static IServiceCollection AddDotBot(
         this IServiceCollection services,
         AppConfig config,
@@ -72,9 +66,7 @@ public static class ServiceRegistration
     /// <returns>The configured module registry.</returns>
     public static ModuleRegistry CreateModuleRegistry()
     {
-        // Module discovery uses source generator by default, with reflection fallback
-        // Set ForceReflectionDiscovery = true to force reflection mode (for debugging)
-        return new ModuleRegistry(forceReflection: ForceReflectionDiscovery);
+        return new ModuleRegistry();
     }
 
     /// <summary>
@@ -106,23 +98,26 @@ public static class ServiceRegistration
         return true;
     }
 
-    public static async Task InitializeServicesAsync(this IServiceProvider provider)
+    extension(IServiceProvider provider)
     {
-        var config = provider.GetRequiredService<AppConfig>();
-        var mcpManager = provider.GetRequiredService<McpClientManager>();
-        if (config.McpServers.Count > 0)
+        public async Task InitializeServicesAsync()
         {
-            await mcpManager.ConnectAsync(config.McpServers);
+            var config = provider.GetRequiredService<AppConfig>();
+            var mcpManager = provider.GetRequiredService<McpClientManager>();
+            if (config.McpServers.Count > 0)
+            {
+                await mcpManager.ConnectAsync(config.McpServers);
+            }
         }
-    }
 
-    public static async ValueTask DisposeServicesAsync(this IServiceProvider provider)
-    {
-        var cronService = provider.GetRequiredService<CronService>();
-        cronService.Stop();
-        cronService.Dispose();
+        public async ValueTask DisposeServicesAsync()
+        {
+            var cronService = provider.GetRequiredService<CronService>();
+            cronService.Stop();
+            cronService.Dispose();
 
-        var mcpManager = provider.GetRequiredService<McpClientManager>();
-        await mcpManager.DisposeAsync();
+            var mcpManager = provider.GetRequiredService<McpClientManager>();
+            await mcpManager.DisposeAsync();
+        }
     }
 }
