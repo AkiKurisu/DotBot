@@ -1,5 +1,4 @@
 using System.Text;
-using DotBot;
 using DotBot.CLI;
 using DotBot.Configuration;
 using DotBot.Hosting;
