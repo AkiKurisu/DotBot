@@ -98,9 +98,7 @@ jobs:
           sed \
             -e "s|{{ VERSION }}|$VERSION|g" \
             -e "s|{{ REPO }}|$REPO|g" \
-            -e "s|{{ NEW_FEATURES }}|- See auto-generated notes below.|g" \
-            -e "s|{{ BUG_FIXES }}|- See auto-generated notes below.|g" \
-            -e "s|{{ IMPROVEMENTS }}|- See auto-generated notes below.|g" \
+            -e "s|{{ CHANGELOG }}|- See auto-generated notes below.|g" \
             ".github/release_template.md" > "release_notes.md"
         else
           echo "Automatic release $VERSION" > "release_notes.md"
