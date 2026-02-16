@@ -3,7 +3,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using DotBot.Abstractions;
 using DotBot.Agents;
-using DotBot.Api.Factories;
 using DotBot.CLI;
 using DotBot.Context;
 using DotBot.Cron;
@@ -35,11 +34,10 @@ public sealed class ApiHost(
     SkillsLoader skillsLoader,
     PathBlacklist blacklist,
     CronService cronService,
-    McpClientManager mcpClientManager) : IDotBotHost
+    McpClientManager mcpClientManager,
+    ApiApprovalService approvalService) : IDotBotHost
 {
     private AgentFactory _agentFactory = null!;
-    
-    private ApiApprovalService _approvalService = null!;
 
     public async Task RunAsync(CancellationToken cancellationToken = default)
     {
@@ -48,21 +46,9 @@ public sealed class ApiHost(
         var traceStore = sp.GetService<TraceStore>();
         var tokenUsageStore = sp.GetService<TokenUsageStore>();
 
-        // Use factory to create approval service
-        var approvalContext = new ApprovalServiceContext
-        {
-            Config = config,
-            WorkspacePath = paths.WorkspacePath,
-            ApprovalMode = config.Api.ApprovalMode,
-            AutoApprove = config.Api.AutoApprove,
-            ApprovalTimeoutSeconds = config.Api.ApprovalTimeoutSeconds
-        };
-        var approvalFactory = new ApiApprovalServiceFactory();
-        _approvalService = (ApiApprovalService)approvalFactory.Create(approvalContext);
-
         _agentFactory = new AgentFactory(
             paths.BotPath, paths.WorkspacePath, config,
-            memoryStore, skillsLoader, _approvalService, blacklist,
+            memoryStore, skillsLoader, approvalService, blacklist,
             toolProviders: null,
             toolProviderContext: new ToolProviderContext
             {
@@ -75,7 +61,7 @@ public sealed class ApiHost(
                 BotPath = paths.BotPath,
                 MemoryStore = memoryStore,
                 SkillsLoader = skillsLoader,
-                ApprovalService = _approvalService,
+                ApprovalService = approvalService,
                 PathBlacklist = blacklist,
                 CronTools = cronTools,
                 McpClientManager = mcpClientManager.Tools.Count > 0 ? mcpClientManager : null,
@@ -286,7 +272,7 @@ public sealed class ApiHost(
             if (!Authenticate(context))
                 return Results.Json(new { error = "unauthorized" }, statusCode: StatusCodes.Status401Unauthorized);
 
-            var pending = _approvalService.PendingApprovals;
+            var pending = approvalService.PendingApprovals;
             var list = pending.Select(a => new
             {
                 id = a.Id,
@@ -319,7 +305,7 @@ public sealed class ApiHost(
                 return Results.Json(new { error = "missing request body" },
                     statusCode: StatusCodes.Status400BadRequest);
 
-            var resolved = _approvalService.Resolve(id, body.Approved);
+            var resolved = approvalService.Resolve(id, body.Approved);
             if (!resolved)
                 return Results.Json(new { error = "approval not found or already resolved" },
                     statusCode: StatusCodes.Status404NotFound);

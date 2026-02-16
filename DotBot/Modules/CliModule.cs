@@ -1,5 +1,7 @@
 using DotBot.Abstractions;
+using DotBot.CLI.Factories;
 using DotBot.Hosting;
+using DotBot.Security;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DotBot.Modules;
@@ -23,8 +25,18 @@ public sealed partial class CliModule : ModuleBase
     /// <inheritdoc />
     public override void ConfigureServices(IServiceCollection services, ModuleContext context)
     {
-        // CLI-specific services are created in CliHost via factories
-        // Core services (ApprovalStore, etc.) are already registered in AddDotBot
+        // Register ConsoleApprovalService (depends on ApprovalStore from AddDotBot)
+        services.AddSingleton(sp =>
+        {
+            var approvalStore = sp.GetRequiredService<ApprovalStore>();
+            var factory = new ConsoleApprovalServiceFactory();
+            return (ConsoleApprovalService)factory.Create(new ApprovalServiceContext
+            {
+                Config = context.Config,
+                WorkspacePath = context.Paths.WorkspacePath,
+                ApprovalStore = approvalStore
+            });
+        });
     }
 }
 

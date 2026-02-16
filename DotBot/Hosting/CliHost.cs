@@ -2,7 +2,6 @@ using System.ClientModel;
 using DotBot.Abstractions;
 using DotBot.Agents;
 using DotBot.CLI;
-using DotBot.CLI.Factories;
 using DotBot.Cron;
 using DotBot.DashBoard;
 using DotBot.Heartbeat;
@@ -23,24 +22,14 @@ public sealed class CliHost(
     SessionStore sessionStore,
     MemoryStore memoryStore,
     SkillsLoader skillsLoader,
-    ApprovalStore approvalStore,
     PathBlacklist blacklist,
     CronService cronService,
     McpClientManager mcpClientManager,
-    LanguageService languageService) : IDotBotHost
+    LanguageService languageService,
+    ConsoleApprovalService cliApprovalService) : IDotBotHost
 {
     public async Task RunAsync(CancellationToken cancellationToken = default)
     {
-        // Use factory to create approval service
-        var approvalContext = new ApprovalServiceContext
-        {
-            Config = config,
-            WorkspacePath = paths.WorkspacePath,
-            ApprovalStore = approvalStore
-        };
-        var approvalFactory = new ConsoleApprovalServiceFactory();
-        IApprovalService cliApprovalService = approvalFactory.Create(approvalContext);
-
         var cronTools = sp.GetService<CronTools>();
         var traceCollector = sp.GetService<TraceCollector>();
         var traceStore = sp.GetService<TraceStore>();

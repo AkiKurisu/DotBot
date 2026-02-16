@@ -1,4 +1,5 @@
 using DotBot.Abstractions;
+using DotBot.Api.Factories;
 using DotBot.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -21,8 +22,21 @@ public sealed partial class ApiModule : ModuleBase
     /// <inheritdoc />
     public override void ConfigureServices(IServiceCollection services, ModuleContext context)
     {
-        // API mode doesn't require additional services beyond core
-        // Module config is already registered in AddModuleConfigurations
+        var config = context.Config.Api;
+
+        // Register ApiApprovalService
+        services.AddSingleton(_ =>
+        {
+            var factory = new ApiApprovalServiceFactory();
+            return (ApiApprovalService)factory.Create(new ApprovalServiceContext
+            {
+                Config = context.Config,
+                WorkspacePath = context.Paths.WorkspacePath,
+                ApprovalMode = config.ApprovalMode,
+                AutoApprove = config.AutoApprove,
+                ApprovalTimeoutSeconds = config.ApprovalTimeoutSeconds
+            });
+        });
     }
 }
 

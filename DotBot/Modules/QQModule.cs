@@ -1,5 +1,7 @@
 using DotBot.Abstractions;
 using DotBot.Hosting;
+using DotBot.QQ;
+using DotBot.QQ.Factories;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DotBot.Modules;
@@ -21,8 +23,29 @@ public sealed partial class QQModule : ModuleBase
     /// <inheritdoc />
     public override void ConfigureServices(IServiceCollection services, ModuleContext context)
     {
-        // QQ-specific services are created in QQBotHost via factories
-        // Module config is already registered in AddModuleConfigurations
+        var config = context.Config.QQBot;
+
+        // Register QQBotClient
+        services.AddSingleton(_ => QQClientFactory.CreateClient(context));
+
+        // Register QQPermissionService
+        services.AddSingleton(QQClientFactory.CreatePermissionService(context));
+
+        // Register QQApprovalService (depends on QQBotClient and QQPermissionService)
+        services.AddSingleton(sp =>
+        {
+            var client = sp.GetRequiredService<QQBotClient>();
+            var permission = sp.GetRequiredService<QQPermissionService>();
+            var factory = new QQApprovalServiceFactory();
+            return (QQApprovalService)factory.Create(new ApprovalServiceContext
+            {
+                Config = context.Config,
+                WorkspacePath = context.Paths.WorkspacePath,
+                ChannelClient = client,
+                PermissionService = permission,
+                ApprovalTimeoutSeconds = config.ApprovalTimeoutSeconds
+            });
+        });
     }
 }
 

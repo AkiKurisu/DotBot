@@ -1,5 +1,7 @@
 using DotBot.Abstractions;
 using DotBot.Hosting;
+using DotBot.WeCom;
+using DotBot.WeCom.Factories;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DotBot.Modules;
@@ -21,8 +23,27 @@ public sealed partial class WeComModule : ModuleBase
     /// <inheritdoc />
     public override void ConfigureServices(IServiceCollection services, ModuleContext context)
     {
-        // WeCom-specific services are created in WeComBotHost via factories
-        // Module config is already registered in AddModuleConfigurations
+        var config = context.Config.WeComBot;
+
+        // Register WeComBotRegistry
+        services.AddSingleton(WeComClientFactory.CreateRegistry(context));
+
+        // Register WeComPermissionService
+        services.AddSingleton(WeComClientFactory.CreatePermissionService(context));
+
+        // Register WeComApprovalService (depends on WeComPermissionService)
+        services.AddSingleton(sp =>
+        {
+            var permission = sp.GetRequiredService<WeComPermissionService>();
+            var factory = new WeComApprovalServiceFactory();
+            return (WeComApprovalService)factory.Create(new ApprovalServiceContext
+            {
+                Config = context.Config,
+                WorkspacePath = context.Paths.WorkspacePath,
+                PermissionService = permission,
+                ApprovalTimeoutSeconds = config.ApprovalTimeoutSeconds
+            });
+        });
     }
 }
 

@@ -7,7 +7,6 @@ using DotBot.Heartbeat;
 using DotBot.Mcp;
 using DotBot.Memory;
 using DotBot.QQ;
-using DotBot.QQ.Factories;
 using DotBot.Security;
 using DotBot.Skills;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,7 +24,10 @@ public sealed class QQBotHost(
     SkillsLoader skillsLoader,
     PathBlacklist blacklist,
     CronService cronService,
-    McpClientManager mcpClientManager) : IDotBotHost
+    McpClientManager mcpClientManager,
+    QQBotClient qqClient,
+    QQPermissionService permissionService,
+    QQApprovalService qqApprovalService) : IDotBotHost
 {
     public async Task RunAsync(CancellationToken cancellationToken = default)
     {
@@ -33,28 +35,6 @@ public sealed class QQBotHost(
         var traceCollector = sp.GetService<TraceCollector>();
         var traceStore = sp.GetService<TraceStore>();
         var tokenUsageStore = sp.GetService<TokenUsageStore>();
-
-        // Use factories to create channel-specific clients and services
-        var moduleContext = new ModuleContext
-        {
-            Config = config,
-            Paths = paths,
-            ServiceProvider = sp
-        };
-
-        var qqClient = QQClientFactory.CreateClient(moduleContext);
-        var permissionService = QQClientFactory.CreatePermissionService(moduleContext);
-
-        var approvalContext = new ApprovalServiceContext
-        {
-            Config = config,
-            WorkspacePath = paths.WorkspacePath,
-            ChannelClient = qqClient,
-            PermissionService = permissionService,
-            ApprovalTimeoutSeconds = config.QQBot.ApprovalTimeoutSeconds
-        };
-        var approvalFactory = new QQApprovalServiceFactory();
-        var qqApprovalService = (QQApprovalService)approvalFactory.Create(approvalContext);
 
         var agentFactory = new AgentFactory(
             paths.BotPath, paths.WorkspacePath, config,

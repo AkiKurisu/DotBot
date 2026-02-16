@@ -9,7 +9,6 @@ using DotBot.Memory;
 using DotBot.Security;
 using DotBot.Skills;
 using DotBot.WeCom;
-using DotBot.WeCom.Factories;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using OpenAI;
@@ -26,7 +25,10 @@ public sealed class WeComBotHost(
     SkillsLoader skillsLoader,
     PathBlacklist blacklist,
     CronService cronService,
-    McpClientManager mcpClientManager) : IDotBotHost
+    McpClientManager mcpClientManager,
+    WeComBotRegistry registry,
+    WeComPermissionService wecomPermissionService,
+    WeComApprovalService wecomApprovalService) : IDotBotHost
 {
     public async Task RunAsync(CancellationToken cancellationToken = default)
     {
@@ -34,27 +36,6 @@ public sealed class WeComBotHost(
         var traceCollector = sp.GetService<TraceCollector>();
         var traceStore = sp.GetService<TraceStore>();
         var tokenUsageStore = sp.GetService<TokenUsageStore>();
-
-        // Use factories to create channel-specific clients and services
-        var moduleContext = new ModuleContext
-        {
-            Config = config,
-            Paths = paths,
-            ServiceProvider = sp
-        };
-
-        var registry = WeComClientFactory.CreateRegistry(moduleContext);
-        var wecomPermissionService = WeComClientFactory.CreatePermissionService(moduleContext);
-
-        var approvalContext = new ApprovalServiceContext
-        {
-            Config = config,
-            WorkspacePath = paths.WorkspacePath,
-            PermissionService = wecomPermissionService,
-            ApprovalTimeoutSeconds = config.WeComBot.ApprovalTimeoutSeconds
-        };
-        var approvalFactory = new WeComApprovalServiceFactory();
-        var wecomApprovalService = (WeComApprovalService)approvalFactory.Create(approvalContext);
 
         var agentFactory = new AgentFactory(
             paths.BotPath, paths.WorkspacePath, config,
