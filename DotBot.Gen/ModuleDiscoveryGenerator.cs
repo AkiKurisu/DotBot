@@ -166,7 +166,7 @@ public sealed class ModuleDiscoveryGenerator : IIncrementalGenerator
 
 using DotBot.Abstractions;
 
-namespace DotBot.Modules.Registry;
+namespace DotBot.Modules;
 
 public sealed partial class ModuleRegistry
 {

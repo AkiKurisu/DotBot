@@ -1,5 +1,4 @@
 using DotBot.Abstractions;
-using DotBot.Hosting;
 using DotBot.Security;
 
 namespace DotBot.Api.Factories;

@@ -1,7 +1,7 @@
 using DotBot.Abstractions;
 using Spectre.Console;
 
-namespace DotBot.Modules.Registry;
+namespace DotBot.Modules;
 
 /// <summary>
 /// Registry for managing DotBot modules.

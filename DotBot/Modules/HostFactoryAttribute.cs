@@ -4,8 +4,8 @@ namespace DotBot.Modules;
 /// Marks a class as a host factory for a specific module.
 /// Used by the source generator to associate factories with modules.
 /// </summary>
-[System.AttributeUsage(System.AttributeTargets.Class, Inherited = false)]
-public sealed class HostFactoryAttribute : System.Attribute
+[AttributeUsage(AttributeTargets.Class, Inherited = false)]
+public sealed class HostFactoryAttribute : Attribute
 {
     /// <summary>
     /// Gets the name of the module this factory belongs to.

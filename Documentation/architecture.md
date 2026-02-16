@@ -12,7 +12,7 @@ DotBot 是一个通用型、工具驱动的智能体系统，采用模块化架�
 
 ```
 DotBot/
-├─ Program.cs                 # 入口：校验工作区、加载 AppConfig、StartupOrchestrator 选择模块
+├─ Program.cs                 # 入口：校验工作区、加载 AppConfig、HostBuilder 选择模块
 ├─ AppConfig.cs               # 分层配置（全局 ~/.bot + 工作区 .bot/appsettings.json）
 │
 ├─ Abstractions/              # 核心抽象接口
@@ -33,8 +33,8 @@ DotBot/
 │  ├─ QQModule.cs             # QQ 模块
 │  └─ WeComModule.cs          # 企业微信模块
 │
-├─ Startup/
-│  └─ StartupOrchestrator.cs  # 启动编排器：协调模块选择与服务配置
+├─ Hosting/                   # 主机相关
+│  └─ HostBuilder.cs          # 启动器：协调模块选择与服务配置
 │
 ├─ Commands/                  # 命令系统
 │  ├─ Core/
@@ -176,8 +176,8 @@ DotBot 采用模块化架构，每个运行形态（CLI、API、QQ、WeCom）都
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    StartupOrchestrator                          │
-│                   (启动编排器)                                   │
+│                        HostBuilder                              │
+│                      (启动器)                                    │
 └──────────────────────────────┬──────────────────────────────────┘
                                │
                                ▼
@@ -394,7 +394,7 @@ AppConfig (主配置)
 
 1. **启动**：`Program.cs` → 检测工作区 → `AppConfig.LoadWithGlobalFallback`
 2. **模块发现**：`ModuleRegistry` → 源码生成器或反射发现模块
-3. **模块选择**：`StartupOrchestrator.SelectAndCreateHost()` → 按优先级选择启用的模块
+3. **模块选择**：`HostBuilder.Build()` → 按优先级选择启用的模块
 4. **服务配置**：`module.ConfigureServices()` → 注册模块特有服务
 5. **Host 创建**：`IHostFactory.CreateHost()` → 创建 `IDotBotHost` 实例
 6. **Agent 构建**：`AgentFactory` → 聚合 `IAgentToolProvider` → 注册工具
@@ -611,7 +611,7 @@ public sealed class MyCommandHandler : ICommandHandler
 - 入口与配置：`Program.cs`、`AppConfig.cs`
 - 抽象接口：`Abstractions/IDotBotModule.cs`、`Abstractions/IHostFactory.cs`、`Abstractions/IAgentToolProvider.cs`
 - 模块系统：`Modules/Registry/ModuleRegistry.cs`、`Modules/CliModule.cs`、`Modules/QQModule.cs`、`Modules/WeComModule.cs`、`Modules/ApiModule.cs`
-- 启动编排：`Startup/StartupOrchestrator.cs`
+- 启动器：`Hosting/HostBuilder.cs`
 - 命令系统：`Commands/Core/CommandDispatcher.cs`、`Commands/Core/ICommandHandler.cs`、`Commands/Handlers/*.cs`
 - 配置映射：`Configuration/Contracts/IModuleConfigBinder.cs`、`Configuration/Core/ModuleConfigProvider.cs`
 - Host 架构：`Hosting/IDotBotHost.cs`、`Hosting/ServiceRegistration.cs`、`Hosting/CliHost.cs`、`Hosting/QQBotHost.cs`、`Hosting/WeComBotHost.cs`、`Hosting/ApiHost.cs`

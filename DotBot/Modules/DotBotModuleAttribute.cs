@@ -3,8 +3,8 @@ namespace DotBot.Modules;
 /// <summary>
 /// Marks a class as a DotBot module for automatic discovery by the source generator.
 /// </summary>
-[System.AttributeUsage(System.AttributeTargets.Class, Inherited = false)]
-public sealed class DotBotModuleAttribute : System.Attribute
+[AttributeUsage(AttributeTargets.Class, Inherited = false)]
+public sealed class DotBotModuleAttribute : Attribute
 {
     /// <summary>
     /// Gets the unique name of the module.

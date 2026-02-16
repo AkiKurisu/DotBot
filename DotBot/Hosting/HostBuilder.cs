@@ -1,33 +1,29 @@
 using DotBot.Abstractions;
-using DotBot.Hosting;
-using DotBot.Modules.Registry;
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
+using ModuleRegistry = DotBot.Modules.ModuleRegistry;
 
-namespace DotBot.Startup;
+namespace DotBot.Hosting;
 
 /// <summary>
-/// Orchestrates the startup sequence for DotBot application.
+/// Selecting a module and creating its host.
 /// Handles module discovery, selection, and host creation.
 /// </summary>
-public sealed class StartupOrchestrator
+public sealed class HostBuilder
 {
     private readonly ModuleRegistry _registry;
+    
     private readonly AppConfig _config;
+    
     private readonly DotBotPaths _paths;
 
     /// <summary>
-    /// Gets the module registry for external inspection.
-    /// </summary>
-    public ModuleRegistry Registry => _registry;
-
-    /// <summary>
-    /// Creates a new startup orchestrator.
+    /// Creates a new bot launcher.
     /// </summary>
     /// <param name="registry">The module registry containing all registered modules.</param>
     /// <param name="config">The application configuration.</param>
     /// <param name="paths">The workspace and bot paths.</param>
-    public StartupOrchestrator(
+    public HostBuilder(
         ModuleRegistry registry,
         AppConfig config,
         DotBotPaths paths)
@@ -42,7 +38,7 @@ public sealed class StartupOrchestrator
     /// </summary>
     /// <param name="services">The service collection to configure.</param>
     /// <param name="module">The module to configure services for.</param>
-    public void ConfigureModuleServices(IServiceCollection services, IDotBotModule module)
+    private void ConfigureModuleServices(IServiceCollection services, IDotBotModule module)
     {
         var context = new ModuleContext
         {
@@ -59,7 +55,7 @@ public sealed class StartupOrchestrator
     /// <param name="serviceProvider">The service provider.</param>
     /// <param name="module">The module to create a host for.</param>
     /// <returns>The created host instance.</returns>
-    public IDotBotHost CreateHost(IServiceProvider serviceProvider, IDotBotModule module)
+    private IDotBotHost CreateHost(IServiceProvider serviceProvider, IDotBotModule module)
     {
         var factory = _registry.GetHostFactory(module.Name);
         if (factory != null)
@@ -77,11 +73,11 @@ public sealed class StartupOrchestrator
     }
 
     /// <summary>
-    /// Selects and creates the primary host based on enabled modules.
+    /// Builds and creates the primary host based on enabled modules.
     /// </summary>
     /// <param name="services">The service collection to configure.</param>
     /// <returns>A tuple containing the service provider and the host.</returns>
-    public (IServiceProvider Provider, IDotBotHost Host) SelectAndCreateHost(IServiceCollection services)
+    public (IServiceProvider Provider, IDotBotHost Host) Build(IServiceCollection services)
     {
         // Print module diagnostics
         _registry.PrintDiagnostics(_config);

@@ -12,7 +12,7 @@ DotBot is a general-purpose, tool-driven intelligent agent system with a modular
 
 ```
 DotBot/
-├─ Program.cs                 # Entry: validate workspace, load AppConfig, StartupOrchestrator selects module
+├─ Program.cs                 # Entry: validate workspace, load AppConfig, HostBuilder selects module
 ├─ AppConfig.cs               # Layered config (global ~/.bot + workspace .bot/appsettings.json)
 │
 ├─ Abstractions/              # Core abstraction interfaces
@@ -33,8 +33,8 @@ DotBot/
 │  ├─ QQModule.cs             # QQ module
 │  └─ WeComModule.cs          # WeCom module
 │
-├─ Startup/
-│  └─ StartupOrchestrator.cs  # Startup orchestrator: coordinates module selection & service config
+├─ Hosting/                   # Host related
+│  └─ HostBuilder.cs          # Launcher: coordinates module selection & service config
 │
 ├─ Commands/                  # Command system
 │  ├─ Core/
@@ -176,8 +176,8 @@ DotBot uses a modular architecture where each runtime mode (CLI, API, QQ, WeCom)
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    StartupOrchestrator                          │
-│                  (Startup Orchestrator)                         │
+│                        HostBuilder                              │
+│                     (Bot Launcher)                              │
 └──────────────────────────────┬──────────────────────────────────┘
                                │
                                ▼
@@ -394,7 +394,7 @@ AppConfig (Main Config)
 
 1. **Startup**: `Program.cs` -> Detect workspace -> `AppConfig.LoadWithGlobalFallback`
 2. **Module Discovery**: `ModuleRegistry` -> Source generator or reflection discovers modules
-3. **Module Selection**: `StartupOrchestrator.SelectAndCreateHost()` -> Select enabled module by priority
+3. **Module Selection**: `HostBuilder.Build()` -> Select enabled module by priority
 4. **Service Configuration**: `module.ConfigureServices()` -> Register module-specific services
 5. **Host Creation**: `IHostFactory.CreateHost()` -> Create `IDotBotHost` instance
 6. **Agent Construction**: `AgentFactory` -> Aggregate `IAgentToolProvider` -> Register tools
@@ -611,7 +611,7 @@ All paths relative to `DotBot/`:
 - Entry & config: `Program.cs`, `AppConfig.cs`
 - Abstractions: `Abstractions/IDotBotModule.cs`, `Abstractions/IHostFactory.cs`, `Abstractions/IAgentToolProvider.cs`
 - Module system: `Modules/Registry/ModuleRegistry.cs`, `Modules/CliModule.cs`, `Modules/QQModule.cs`, `Modules/WeComModule.cs`, `Modules/ApiModule.cs`
-- Startup orchestration: `Startup/StartupOrchestrator.cs`
+- Launcher: `Hosting/HostBuilder.cs`
 - Command system: `Commands/Core/CommandDispatcher.cs`, `Commands/Core/ICommandHandler.cs`, `Commands/Handlers/*.cs`
 - Config mapping: `Configuration/Contracts/IModuleConfigBinder.cs`, `Configuration/Core/ModuleConfigProvider.cs`
 - Host architecture: `Hosting/IDotBotHost.cs`, `Hosting/ServiceRegistration.cs`, `Hosting/CliHost.cs`, `Hosting/QQBotHost.cs`, `Hosting/WeComBotHost.cs`, `Hosting/ApiHost.cs`

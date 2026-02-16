@@ -1,10 +1,10 @@
 using DotBot.Abstractions;
 using DotBot.Hosting;
-using DotBot.QQ;
+using DotBot.Modules;
 using DotBot.QQ.Factories;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace DotBot.Modules;
+namespace DotBot.QQ;
 
 /// <summary>
 /// QQ Bot module for QQ platform interaction via OneBot protocol.

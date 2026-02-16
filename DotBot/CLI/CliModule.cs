@@ -1,10 +1,11 @@
 using DotBot.Abstractions;
 using DotBot.CLI.Factories;
 using DotBot.Hosting;
+using DotBot.Modules;
 using DotBot.Security;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace DotBot.Modules;
+namespace DotBot.CLI;
 
 /// <summary>
 /// CLI module for interactive console-based interaction.

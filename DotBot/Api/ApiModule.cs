@@ -1,9 +1,10 @@
 using DotBot.Abstractions;
 using DotBot.Api.Factories;
 using DotBot.Hosting;
+using DotBot.Modules;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace DotBot.Modules;
+namespace DotBot.Api;
 
 /// <summary>
 /// API module for OpenAI-compatible HTTP API interaction.

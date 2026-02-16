@@ -3,6 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using DotBot.Abstractions;
 using DotBot.Agents;
+using DotBot.Api;
 using DotBot.CLI;
 using DotBot.Context;
 using DotBot.Cron;

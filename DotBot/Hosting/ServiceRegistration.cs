@@ -5,11 +5,11 @@ using DotBot.DashBoard;
 using DotBot.Localization;
 using DotBot.Mcp;
 using DotBot.Memory;
-using DotBot.Modules.Registry;
 using DotBot.Security;
 using DotBot.Skills;
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
+using ModuleRegistry = DotBot.Modules.ModuleRegistry;
 
 namespace DotBot.Hosting;
 

@@ -3,7 +3,7 @@ using DotBot;
 using DotBot.CLI;
 using DotBot.Hosting;
 using DotBot.Localization;
-using DotBot.Startup;
+
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
 
@@ -94,14 +94,14 @@ var paths = new DotBotPaths
 };
 
 var moduleRegistry = ServiceRegistration.CreateModuleRegistry();
-var orchestrator = new StartupOrchestrator(moduleRegistry, config, paths);
+var hostBuilder = new HostBuilder(moduleRegistry, config, paths);
 
 // Create service collection with core services
 var services = new ServiceCollection()
     .AddDotBot(config, workspacePath, botPath);
 
-// Select module and create host
-var (provider, host) = orchestrator.SelectAndCreateHost(services);
+// Create host
+var (provider, host) = hostBuilder.Build(services);
 
 await provider.InitializeServicesAsync();
 
