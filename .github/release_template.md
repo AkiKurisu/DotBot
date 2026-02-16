@@ -1,5 +1,17 @@
 # DotBot {{ VERSION }}
 
+## 🚀 Quick Start
+
+1. Download the compressed package for your platform.
+
+2. Extract it to any directory.
+
+3. Configure the `appsettings.json` file.
+
+4. Run the executable file.
+
+For detailed documentation, please see: [User Guide](https://github.com/{{ REPO }}/tree/master/Documentation/index.md)
+
 ## 🚀 快速开始
 
 1. 下载对应平台的压缩包
@@ -19,7 +31,3 @@
 
 ### 优化
 {{ IMPROVEMENTS }}
-
-## 📄 许可证
-
-Apache License 2.0
