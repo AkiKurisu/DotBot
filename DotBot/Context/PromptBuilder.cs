@@ -194,13 +194,15 @@ This is your working directory where you perform file and shell operations.
 ## DotBot Directory
 Your data directory is at: {{dotBot}}
 This contains:
-- Memory files: {{dotBot}}/memory/MEMORY.md
-- Daily notes: {{dotBot}}/memory/YYYY-MM-DD.md
+- Long-term memory: {{dotBot}}/memory/MEMORY.md (always loaded into context)
+- Event history log: {{dotBot}}/memory/HISTORY.md (use shell grep to search)
 - Custom skills: {{dotBot}}/skills/{skill-name}/SKILL.md
 - Configuration: {{dotBot}}/appsettings.json
 
-Always be helpful, accurate, and concise. When using tools, explain what you're doing.
-When remembering something, write to {{dotBot}}/memory/MEMORY.md
+## Memory Instructions
+- When you learn something important (facts, preferences, project context), write it to {{dotBot}}/memory/MEMORY.md.
+- To recall past events or decisions, search the history log with the shell tool:
+  grep -i "keyword" "{{dotBot}}/memory/HISTORY.md"
 """;
     }
 }

@@ -282,6 +282,8 @@ public sealed class QQChannelAdapter : IAsyncDisposable
                 }
             }
 
+            _agentFactory?.TryConsolidateMemory(session, sessionId);
+
             await _sessionStore.SaveAsync(_agent, session, sessionId, CancellationToken.None);
         }
         catch (Exception ex)

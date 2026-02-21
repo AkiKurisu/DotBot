@@ -3,7 +3,7 @@ using Microsoft.Extensions.AI;
 
 namespace DotBot.Context;
 
-public sealed class ContextCompactor(OpenAI.Chat.ChatClient chatClient)
+public sealed class ContextCompactor(OpenAI.Chat.ChatClient chatClient, MemoryConsolidator? memoryConsolidator = null)
 {
     private const string CompactionPrompt =
         """
@@ -40,6 +40,9 @@ public sealed class ContextCompactor(OpenAI.Chat.ChatClient chatClient)
 
         if (messagesToSummarize.Count == 0)
             return false;
+
+        // Persist knowledge from about-to-be-discarded messages before compacting.
+        memoryConsolidator?.ConsolidateInBackground(messagesToSummarize);
 
         var summary = await GenerateSummaryAsync(messagesToSummarize, cancellationToken);
         if (string.IsNullOrWhiteSpace(summary))

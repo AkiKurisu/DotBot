@@ -93,6 +93,7 @@ public static class DashBoardMiddleware
             subagentMaxConcurrency = config.SubagentMaxConcurrency,
             compactSessions = config.CompactSessions,
             maxContextTokens = config.MaxContextTokens,
+            memoryWindow = config.MemoryWindow,
             debugMode = config.DebugMode,
             // Tools config
             tools = new

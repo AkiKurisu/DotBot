@@ -44,6 +44,14 @@ public sealed class AppConfig
     public int MaxContextTokens { get; set; } = 160000;
 
     /// <summary>
+    /// Number of messages in a session before triggering background memory consolidation.
+    /// When exceeded, old messages are consolidated into MEMORY.md (long-term facts) and
+    /// HISTORY.md (grep-searchable event log) via an LLM call.
+    /// Set to 0 to disable message-count-based consolidation (default: 50).
+    /// </summary>
+    public int MemoryWindow { get; set; } = 50;
+
+    /// <summary>
     /// Enable debug mode to display full tool call arguments without truncation.
     /// Can be toggled at runtime by administrators using /debug command in QQ/WeCom bots.
     /// </summary>
