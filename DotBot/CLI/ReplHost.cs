@@ -62,6 +62,7 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
             if (await RunStreamingAsync(trimmed, _agentSession, cancellationToken))
             {
                 await TryCompactContextAsync(_currentSessionId, _agentSession, cancellationToken);
+                agentFactory?.TryConsolidateMemory(_agentSession, _currentSessionId);
                 await sessionStore.SaveAsync(agent, _agentSession, _currentSessionId, cancellationToken);
             }
         }
@@ -352,28 +353,53 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
         {
             AnsiConsole.MarkupLine($"[grey]{Strings.MemoryNotExists(_lang)}[/]");
             AnsiConsole.MarkupLine($"[grey]{Strings.ExpectedPath(_lang)}: {memoryPath.EscapeMarkup()}[/]");
-            AnsiConsole.WriteLine();
-            return;
+        }
+        else
+        {
+            var content = File.ReadAllText(memoryPath, Encoding.UTF8);
+
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                AnsiConsole.MarkupLine($"[grey]{Strings.MemoryEmpty(_lang)}[/]");
+            }
+            else
+            {
+                var panel = new Panel(Markup.Escape(content))
+                {
+                    Header = new PanelHeader($"[purple]🗃️ {memoryPath.EscapeMarkup()}[/]"),
+                    Border = BoxBorder.Rounded,
+                    BorderStyle = new Style(Color.Purple),
+                    Expand = true
+                };
+                AnsiConsole.Write(panel);
+            }
         }
 
-        var content = File.ReadAllText(memoryPath, Encoding.UTF8);
-
-        if (string.IsNullOrWhiteSpace(content))
+        // Show HISTORY.md summary
+        var historyPath = Path.Combine(memoryDir, "HISTORY.md");
+        if (File.Exists(historyPath))
         {
-            AnsiConsole.MarkupLine($"[grey]{Strings.MemoryEmpty(_lang)}[/]");
-            AnsiConsole.WriteLine();
-            return;
+            var historyInfo = new FileInfo(historyPath);
+            var historyContent = File.ReadAllText(historyPath, Encoding.UTF8);
+            var entryCount = historyContent.Split("\n\n", StringSplitOptions.RemoveEmptyEntries).Length;
+
+            // Show last entry as preview
+            var entries = historyContent.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
+            var lastEntry = entries.Length > 0 ? entries[^1].Trim() : string.Empty;
+            var preview = lastEntry.Length > 200 ? lastEntry[..200] + "..." : lastEntry;
+
+            var historyPanel = new Panel(
+                string.IsNullOrWhiteSpace(preview) ? "[grey](no entries)[/]" : Markup.Escape(preview))
+            {
+                Header = new PanelHeader($"[blue]📜 HISTORY.md — {entryCount} entries, {historyInfo.Length / 1024.0:F1} KB[/]"),
+                Border = BoxBorder.Rounded,
+                BorderStyle = new Style(Color.Blue),
+                Expand = true
+            };
+            AnsiConsole.Write(historyPanel);
+            AnsiConsole.MarkupLine($"[grey]  Search: grep -i \"keyword\" \"{historyPath.EscapeMarkup()}\"[/]");
         }
 
-        var panel = new Panel(Markup.Escape(content))
-        {
-            Header = new PanelHeader($"[purple]🗃️ {memoryPath.EscapeMarkup()}[/]"),
-            Border = BoxBorder.Rounded,
-            BorderStyle = new Style(Color.Purple),
-            Expand = true
-        };
-
-        AnsiConsole.Write(panel);
         AnsiConsole.WriteLine();
     }
 

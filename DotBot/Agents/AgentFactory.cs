@@ -17,6 +17,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using OpenAI;
 using OpenAI.Chat;
+using AiChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
 namespace DotBot.Agents;
 
@@ -32,8 +33,9 @@ public sealed class AgentFactory
     private readonly string _cortexBotPath;
     private readonly string _workspacePath;
     private readonly ChatClient _chatClient;
-    private readonly ContextCompactor? _contextCompactor;
     private readonly ConcurrentDictionary<string, TokenTracker> _tokenTrackers = new();
+    private readonly ConcurrentDictionary<string, int> _lastConsolidated = new();
+    private readonly HashSet<string> _consolidating = [];
     private readonly TraceCollector? _traceCollector;
     private readonly HashSet<string> _globalEnabledToolNames;
     private readonly ToolProviderContext _toolProviderContext;
@@ -71,8 +73,10 @@ public sealed class AgentFactory
             Endpoint = new Uri(config.EndPoint)
         }).GetChatClient(_config.Model);
 
+        Consolidator = new MemoryConsolidator(_chatClient, memoryStore);
+
         if (config.MaxContextTokens > 0)
-            _contextCompactor = new ContextCompactor(_chatClient);
+            Compactor = new ContextCompactor(_chatClient, Consolidator);
 
         // Initialize WeCom tools for backward compatibility (WeComTools property accessor)
         if ((config.WeCom.Enabled && !string.IsNullOrWhiteSpace(config.WeCom.WebhookUrl)) || config.WeComBot.Enabled)
@@ -111,12 +115,22 @@ public sealed class AgentFactory
     /// <summary>
     /// Gets the context compactor for large conversations.
     /// </summary>
-    public ContextCompactor? Compactor => _contextCompactor;
+    public ContextCompactor? Compactor { get; }
+
+    /// <summary>
+    /// Gets the memory consolidator for persisting conversation knowledge.
+    /// </summary>
+    public MemoryConsolidator? Consolidator { get; }
 
     /// <summary>
     /// Gets the maximum context tokens from configuration.
     /// </summary>
     public int MaxContextTokens => _config.MaxContextTokens;
+
+    /// <summary>
+    /// Gets the memory window (message count threshold for consolidation).
+    /// </summary>
+    public int MemoryWindow => _config.MemoryWindow;
 
     /// <summary>
     /// Gets or creates a token tracker for the specified session.
@@ -132,6 +146,73 @@ public sealed class AgentFactory
     public void RemoveTokenTracker(string sessionKey)
     {
         _tokenTrackers.TryRemove(sessionKey, out _);
+    }
+
+    /// <summary>
+    /// Checks whether the session's message count exceeds <see cref="MemoryWindow"/> and, if so,
+    /// fires a background memory consolidation for the new messages since the last consolidation.
+    /// Safe to call after every agent turn; no-op when conditions are not met.
+    /// </summary>
+    public void TryConsolidateMemory(AgentSession session, string sessionKey)
+    {
+        if (Consolidator == null || _config.MemoryWindow <= 0)
+            return;
+
+        var chatHistory = session.GetService<ChatHistoryProvider>();
+        if (chatHistory is not InMemoryChatHistoryProvider memoryProvider)
+            return;
+
+        int messageCount = memoryProvider.Count;
+        int lastConsolidated = _lastConsolidated.GetOrAdd(sessionKey, 0);
+
+        int newMessageCount = messageCount - lastConsolidated;
+        if (newMessageCount <= _config.MemoryWindow)
+            return;
+
+        lock (_consolidating)
+        {
+            if (!_consolidating.Add(sessionKey))
+                return;
+        }
+
+        // Determine the slice of messages to consolidate:
+        // keep the last MemoryWindow/2 messages for continuity.
+        int keepCount = _config.MemoryWindow / 2;
+        int consolidateEnd = messageCount - keepCount;
+        if (consolidateEnd <= lastConsolidated)
+        {
+            lock (_consolidating) { _consolidating.Remove(sessionKey); }
+            return;
+        }
+
+        var toConsolidate = new List<AiChatMessage>();
+        for (int i = lastConsolidated; i < consolidateEnd; i++)
+            toConsolidate.Add(memoryProvider[i]);
+
+        int newLastConsolidated = consolidateEnd;
+        _lastConsolidated[sessionKey] = newLastConsolidated;
+
+        var consolidator = Consolidator;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await consolidator.ConsolidateAsync(toConsolidate);
+            }
+            finally
+            {
+                lock (_consolidating) { _consolidating.Remove(sessionKey); }
+            }
+        });
+    }
+
+    /// <summary>
+    /// Resets the consolidation tracking for the given session (e.g., when session is cleared).
+    /// </summary>
+    public void ResetConsolidationTracking(string sessionKey)
+    {
+        _lastConsolidated.TryRemove(sessionKey, out _);
+        lock (_consolidating) { _consolidating.Remove(sessionKey); }
     }
 
     /// <summary>
@@ -157,20 +238,6 @@ public sealed class AgentFactory
         InitializeToolIconRegistry();
 
         return tools;
-    }
-
-    /// <summary>
-    /// Creates tools filtered by the specified enabled tool names.
-    /// </summary>
-    public List<AITool> CreateFilteredTools(IReadOnlyList<string> enabledToolNames)
-    {
-        var allTools = CreateDefaultTools();
-        if (enabledToolNames.Count == 0)
-            return allTools;
-
-        return allTools
-            .Where(t => enabledToolNames.Contains(t.Name, StringComparer.OrdinalIgnoreCase))
-            .ToList();
     }
 
     /// <summary>

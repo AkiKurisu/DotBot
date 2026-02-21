@@ -3,7 +3,8 @@ using System.Text;
 namespace DotBot.Memory;
 
 /// <summary>
-/// Memory system supporting daily notes (memory/YYYY-MM-DD.md) and long-term memory (MEMORY.md).
+/// Dual-layer memory: MEMORY.md (structured long-term facts, always in context) +
+/// HISTORY.md (append-only grep-searchable event log, not in context).
 /// </summary>
 public sealed class MemoryStore
 {
@@ -11,56 +12,20 @@ public sealed class MemoryStore
     
     private readonly string _longTermFile;
 
+    private readonly string _historyFile;
+
     public MemoryStore(string workspaceRoot)
     {
         _memoryDir = Path.Combine(workspaceRoot, "memory");
         Directory.CreateDirectory(_memoryDir);
         _longTermFile = Path.Combine(_memoryDir, "MEMORY.md");
+        _historyFile = Path.Combine(_memoryDir, "HISTORY.md");
     }
 
     /// <summary>
-    /// Get today's memory file path (YYYY-MM-DD.md).
+    /// Gets the path to the HISTORY.md file.
     /// </summary>
-    public string GetTodayFile()
-    {
-        var today = DateTime.Now.ToString("yyyy-MM-dd");
-        return Path.Combine(_memoryDir, $"{today}.md");
-    }
-
-    /// <summary>
-    /// Read today's memory notes.
-    /// </summary>
-    public string ReadToday()
-    {
-        var todayFile = GetTodayFile();
-        return File.Exists(todayFile) ? File.ReadAllText(todayFile, Encoding.UTF8) : string.Empty;
-    }
-
-    /// <summary>
-    /// Append content to today's memory notes.
-    /// </summary>
-    public void AppendToday(string content)
-    {
-        if (string.IsNullOrWhiteSpace(content))
-            return;
-
-        var todayFile = GetTodayFile();
-        var today = DateTime.Now.ToString("yyyy-MM-dd");
-
-        string finalContent;
-        if (File.Exists(todayFile))
-        {
-            var existing = File.ReadAllText(todayFile, Encoding.UTF8);
-            finalContent = existing + "\n" + content.Trim();
-        }
-        else
-        {
-            var header = $"# {today}\n\n";
-            finalContent = header + content.Trim();
-        }
-
-        File.WriteAllText(todayFile, finalContent, Encoding.UTF8);
-    }
+    public string HistoryFilePath => _historyFile;
 
     /// <summary>
     /// Read long-term memory (MEMORY.md).
@@ -79,98 +44,33 @@ public sealed class MemoryStore
     }
 
     /// <summary>
-    /// Get memories from the last N days.
+    /// Append a timestamped entry to HISTORY.md (grep-searchable event log).
+    /// Each entry is a paragraph followed by a blank line.
     /// </summary>
-    public string GetRecentMemories(int days = 7)
+    public void AppendHistory(string entry)
     {
-        var memories = new List<string>();
-        var today = DateTime.Now.Date;
+        if (string.IsNullOrWhiteSpace(entry))
+            return;
 
-        for (var i = 0; i < days; i++)
-        {
-            var date = today.AddDays(-i);
-            var dateStr = date.ToString("yyyy-MM-dd");
-            var filePath = Path.Combine(_memoryDir, $"{dateStr}.md");
-
-            if (File.Exists(filePath))
-            {
-                var content = File.ReadAllText(filePath, Encoding.UTF8);
-                memories.Add(content);
-            }
-        }
-
-        return memories.Count > 0 ? string.Join("\n\n---\n\n", memories) : string.Empty;
+        using var writer = new StreamWriter(_historyFile, append: true, Encoding.UTF8);
+        writer.Write(entry.TrimEnd());
+        writer.Write("\n\n");
     }
 
     /// <summary>
-    /// List all daily memory files sorted by date (newest first).
+    /// Read the full HISTORY.md content (used during consolidation).
     /// </summary>
-    public List<string> ListMemoryFiles()
+    public string ReadHistory()
     {
-        if (!Directory.Exists(_memoryDir))
-            return [];
-
-        return Directory.GetFiles(_memoryDir, "????-??-??.md")
-            .OrderByDescending(f => f)
-            .ToList();
+        return File.Exists(_historyFile) ? File.ReadAllText(_historyFile, Encoding.UTF8) : string.Empty;
     }
 
     /// <summary>
-    /// Get combined memory context for agent (long-term + today's notes).
+    /// Get combined memory context for agent (long-term memory only; HISTORY.md is searched on demand via grep).
     /// </summary>
     public string GetMemoryContext()
     {
-        var parts = new List<string>();
-
         var longTerm = ReadLongTerm();
-        if (!string.IsNullOrWhiteSpace(longTerm))
-            parts.Add("## Long-term Memory\n" + longTerm);
-
-        var today = ReadToday();
-        if (!string.IsNullOrWhiteSpace(today))
-            parts.Add("## Today's Notes\n" + today);
-
-        return parts.Count > 0 ? string.Join("\n\n", parts) : string.Empty;
-    }
-
-    /// <summary>
-    /// Add memory item (stores to today's notes).
-    /// </summary>
-    public void Add(string text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-            return;
-
-        var timestamp = DateTime.Now.ToString("HH:mm:ss");
-        AppendToday($"- [{timestamp}] {text.Trim()}");
-    }
-
-    /// <summary>
-    /// Get all memories (returns recent 7 days as list).
-    /// </summary>
-    public List<MemoryItem> GetAll()
-    {
-        var items = new List<MemoryItem>();
-        var files = ListMemoryFiles().Take(7);
-
-        foreach (var file in files)
-        {
-            var content = File.ReadAllText(file, Encoding.UTF8);
-            var date = Path.GetFileNameWithoutExtension(file);
-            items.Add(new MemoryItem
-            {
-                Text = $"[{date}]\n{content}",
-                CreatedAt = DateTime.Parse(date)
-            });
-        }
-
-        return items;
-    }
-
-    public sealed class MemoryItem
-    {
-        public string Text { get; set; } = string.Empty;
-        
-        public DateTimeOffset CreatedAt { get; set; }
+        return !string.IsNullOrWhiteSpace(longTerm) ? "## Long-term Memory\n" + longTerm : string.Empty;
     }
 }
