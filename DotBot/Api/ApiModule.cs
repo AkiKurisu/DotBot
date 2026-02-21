@@ -1,6 +1,7 @@
 using DotBot.Abstractions;
 using DotBot.Api.Factories;
 using DotBot.Configuration;
+using DotBot.Gateway;
 using DotBot.Hosting;
 using DotBot.Modules;
 using Microsoft.Extensions.DependencyInjection;
@@ -42,6 +43,10 @@ public sealed partial class ApiModule : ModuleBase
             });
         });
     }
+
+    /// <inheritdoc />
+    public override IChannelService? CreateChannelService(IServiceProvider sp, ModuleContext context)
+        => ActivatorUtilities.CreateInstance<ApiChannelService>(sp);
 }
 
 /// <summary>

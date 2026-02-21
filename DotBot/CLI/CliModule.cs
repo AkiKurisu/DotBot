@@ -19,9 +19,11 @@ public sealed partial class CliModule : ModuleBase
     /// <inheritdoc />
     public override bool IsEnabled(AppConfig config)
     {
-        // CLI is enabled when no other modules are enabled
-        // Support both old AppConfig access and new module config
-        return !config.QQBot.Enabled && !config.WeComBot.Enabled && !config.Api.Enabled;
+        // CLI is enabled only when no other modules are active
+        return !config.Gateway.Enabled
+               && !config.QQBot.Enabled
+               && !config.WeComBot.Enabled
+               && !config.Api.Enabled;
     }
 
     /// <inheritdoc />

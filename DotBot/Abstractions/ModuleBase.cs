@@ -26,4 +26,7 @@ public abstract class ModuleBase : IDotBotModule
 
     /// <inheritdoc />
     public virtual IReadOnlyList<string> ValidateConfig(AppConfig config) => [];
+
+    /// <inheritdoc />
+    public virtual IChannelService? CreateChannelService(IServiceProvider sp, ModuleContext context) => null;
 }

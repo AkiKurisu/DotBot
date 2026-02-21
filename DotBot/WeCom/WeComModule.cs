@@ -1,5 +1,6 @@
 using DotBot.Abstractions;
 using DotBot.Configuration;
+using DotBot.Gateway;
 using DotBot.Hosting;
 using DotBot.WeCom;
 using DotBot.WeCom.Factories;
@@ -48,6 +49,10 @@ public sealed partial class WeComModule : ModuleBase
             });
         });
     }
+
+    /// <inheritdoc />
+    public override IChannelService? CreateChannelService(IServiceProvider sp, ModuleContext context)
+        => ActivatorUtilities.CreateInstance<WeComChannelService>(sp);
 }
 
 /// <summary>

@@ -92,8 +92,20 @@ public sealed class HostBuilder
 
         AnsiConsole.MarkupLine($"[green][[Startup]][/] Using module: {primaryModule.Name}");
 
-        // Configure services for the selected module
+        // Configure services for the primary module
         ConfigureModuleServices(services, primaryModule);
+
+        // In gateway mode, also configure all enabled sub-module services so their
+        // channel-specific dependencies (QQBotClient, WeComBotRegistry, etc.) are in the DI container
+        if (primaryModule.Name == "gateway")
+        {
+            foreach (var subModule in _registry.GetEnabledModules(_config)
+                         .Where(m => m.Name != "gateway"))
+            {
+                AnsiConsole.MarkupLine($"[grey]  Configuring sub-module services: {subModule.Name}[/]");
+                ConfigureModuleServices(services, subModule);
+            }
+        }
 
         // Build service provider
         var provider = services.BuildServiceProvider();

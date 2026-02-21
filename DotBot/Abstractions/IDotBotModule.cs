@@ -41,4 +41,13 @@ public interface IDotBotModule
     /// <param name="config">The application configuration.</param>
     /// <returns>List of validation errors, empty if valid.</returns>
     IReadOnlyList<string> ValidateConfig(AppConfig config) => [];
+
+    /// <summary>
+    /// Creates a channel service for use in Gateway mode, where multiple channels run concurrently.
+    /// Returns null if the module does not support channel service mode.
+    /// </summary>
+    /// <param name="sp">The service provider with all shared DI services available.</param>
+    /// <param name="context">The module context containing configuration and paths.</param>
+    /// <returns>A channel service instance, or null if not supported.</returns>
+    IChannelService? CreateChannelService(IServiceProvider sp, ModuleContext context) => null;
 }
