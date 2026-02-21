@@ -26,7 +26,7 @@
 
 - 🛠️ **Tool Capabilities**: File read/write (workspace-scoped), controlled Shell commands, Web scraping, optional SubAgent delegation
 - 🔌 **MCP Integration**: Connect external tool services via [Model Context Protocol](https://modelcontextprotocol.io/)
-- 🎮 **Multiple Runtime Modes**: Local REPL, QQ Bot (OneBot V11), WeCom Bot, API Service (OpenAI-compatible)
+- 🎮 **Multiple Runtime Modes**: Local REPL, QQ Bot (OneBot V11), WeCom Bot, API Service (OpenAI-compatible), **Gateway multi-channel concurrent mode**
 - 📊 **Dashboard**: Built-in Web UI for real-time monitoring of token usage, session history, and tool call traces
 - 🧩 **Skills System**: Dynamically load Skills from workspace
 - 📢 **Notification Push**: WeCom group bot and Webhook notifications
@@ -50,7 +50,14 @@
 ## 🚀 Quick Start
 
 ```bash
-# Enter your workspace
+# Build the Release package
+build.bat
+
+# Configure the path to environment variables
+cd Release/DotBot
+bash install_to_path.ps1
+
+# Enter the workspace
 cd Workspace
 
 # Start DotBot
@@ -62,7 +69,7 @@ dotbot
 | Document | Description |
 |----------|-------------|
 | [Architecture & Security](./Documentation/en/architecture.md) | Architecture design, security model |
-| [Configuration Guide](./Documentation/en/config_guide.md) | Tools, security, blacklists, approval, MCP |
+| [Configuration Guide](./Documentation/en/config_guide.md) | Tools, security, blacklists, approval, MCP, Gateway |
 | [API Mode Guide](./Documentation/en/api_guide.md) | OpenAI-compatible API, tool filtering, SDK examples |
 | [QQ Bot Guide](./Documentation/en/qq_bot_guide.md) | NapCat / permissions / approval |
 | [WeCom Guide](./Documentation/en/wecom_guide.md) | WeCom push notifications / bot mode |

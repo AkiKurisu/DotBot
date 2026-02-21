@@ -1,6 +1,7 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using DotBot.CLI;
+using DotBot.Configuration;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -92,6 +93,7 @@ public static class DashBoardMiddleware
             subagentMaxConcurrency = config.SubagentMaxConcurrency,
             compactSessions = config.CompactSessions,
             maxContextTokens = config.MaxContextTokens,
+            memoryWindow = config.MemoryWindow,
             debugMode = config.DebugMode,
             // Tools config
             tools = new

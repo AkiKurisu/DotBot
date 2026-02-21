@@ -1,5 +1,8 @@
+using System.ClientModel;
+using DotBot.Abstractions;
 using DotBot.Agents;
 using DotBot.CLI;
+using DotBot.Configuration;
 using DotBot.Cron;
 using DotBot.DashBoard;
 using DotBot.Heartbeat;
@@ -9,6 +12,7 @@ using DotBot.Memory;
 using DotBot.Security;
 using DotBot.Skills;
 using Microsoft.Extensions.DependencyInjection;
+using OpenAI;
 
 namespace DotBot.Hosting;
 
@@ -19,16 +23,14 @@ public sealed class CliHost(
     SessionStore sessionStore,
     MemoryStore memoryStore,
     SkillsLoader skillsLoader,
-    ApprovalStore approvalStore,
     PathBlacklist blacklist,
     CronService cronService,
     McpClientManager mcpClientManager,
-    LanguageService languageService) : IDotBotHost
+    LanguageService languageService,
+    ConsoleApprovalService cliApprovalService) : IDotBotHost
 {
     public async Task RunAsync(CancellationToken cancellationToken = default)
     {
-        IApprovalService cliApprovalService = new ConsoleApprovalService(approvalStore);
-
         var cronTools = sp.GetService<CronTools>();
         var traceCollector = sp.GetService<TraceCollector>();
         var traceStore = sp.GetService<TraceStore>();
@@ -37,8 +39,24 @@ public sealed class CliHost(
         var agentFactory = new AgentFactory(
             paths.BotPath, paths.WorkspacePath, config,
             memoryStore, skillsLoader, cliApprovalService, blacklist,
-            cronTools: cronTools,
-            mcpClientManager: mcpClientManager.Tools.Count > 0 ? mcpClientManager : null,
+            toolProviders: null,
+            toolProviderContext: new ToolProviderContext
+            {
+                Config = config,
+                ChatClient = new OpenAIClient(new ApiKeyCredential(config.ApiKey), new OpenAIClientOptions
+                {
+                    Endpoint = new Uri(config.EndPoint)
+                }).GetChatClient(config.Model),
+                WorkspacePath = paths.WorkspacePath,
+                BotPath = paths.BotPath,
+                MemoryStore = memoryStore,
+                SkillsLoader = skillsLoader,
+                ApprovalService = cliApprovalService,
+                PathBlacklist = blacklist,
+                CronTools = cronTools,
+                McpClientManager = mcpClientManager.Tools.Count > 0 ? mcpClientManager : null,
+                TraceCollector = traceCollector
+            },
             traceCollector: traceCollector);
 
         var agent = agentFactory.CreateDefaultAgent();

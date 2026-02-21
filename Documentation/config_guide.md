@@ -195,7 +195,7 @@ WeCom Bot 的详细配置说明请参考 [企业微信指南](./wecom_guide.md)�
 | `WeComBot.ApprovalTimeoutSeconds` | 操作审批超时（秒） | `60` |
 | `WeComBot.Robots` | 机器人配置列表（Path/Token/AesKey） | `[]` |
 
-**注意**：QQ Bot、WeCom Bot 和 API 模式不能同时启用，按 QQ Bot > WeCom Bot > API > CLI 的优先级选择。
+**注意**：默认情况下（`Gateway.Enabled = false`），QQ Bot、WeCom Bot 和 API 模式不能同时启用，按 QQ Bot > WeCom Bot > API > CLI 的优先级选择。若需同时运行多个 Channel，请启用 [Gateway 模式](#gateway-多-channel-并发模式)。
 
 **权限说明**：
 - `AdminUsers`：拥有所有权限，工作区内写入操作需要审批
@@ -620,6 +620,81 @@ QQ Bot 模式下支持以下斜杠命令（直接在聊天中发送）：
 
 ---
 
+## Gateway 多 Channel 并发模式
+
+默认情况下，DotBot 每次只运行一个 Channel 模块（优先级最高者胜出）。**Gateway 模式**打破这一限制，允许 QQ Bot、WeCom Bot、API 服务在**同一个进程**中并发运行，共享 HeartbeatService、CronService 和 DashBoard。
+
+### 启用方式
+
+在配置中同时设置 `Gateway.Enabled = true` 和所有需要启用的 Channel：
+
+```json
+{
+    "Gateway": { "Enabled": true },
+    "QQBot": {
+        "Enabled": true,
+        "Port": 6700,
+        "AdminUsers": [123456789]
+    },
+    "WeComBot": {
+        "Enabled": true,
+        "Port": 9000,
+        "Robots": [{ "Path": "/dotbot", "Token": "your_token", "AesKey": "your_aeskey" }]
+    },
+    "Api": {
+        "Enabled": true,
+        "Port": 8080
+    }
+}
+```
+
+### 配置项
+
+| 配置项 | 说明 | 默认值 |
+|--------|------|--------|
+| `Gateway.Enabled` | 是否启用 Gateway 多 Channel 并发模式 | `false` |
+
+### 工作原理
+
+启用后，DotBot 会：
+
+1. 将 GatewayModule 作为主模块（优先级最高，为 100）
+2. 为每个 enabled 的 Channel（QQ / WeCom / API）独立创建 AgentFactory、ChannelAdapter 和网络监听
+3. 并发启动所有 Channel，每个 Channel 拥有独立的流式交互和审批工作流
+4. 共享一套 HeartbeatService 和 CronService，通过 MessageRouter 将结果投递到正确 Channel
+
+```
+GatewayHost
+├── HeartbeatService (共享，按 Channel 路由通知)
+├── CronService (共享，按 Payload.Channel 路由投递)
+├── DashBoardServer (共享)
+├── QQChannelService    → QQChannelAdapter → Agent (独立)
+├── WeComChannelService → WeComChannelAdapter → Agent (独立)
+└── ApiChannelService   → OpenAI API 端点 → Agent (独立)
+```
+
+### Cron 跨 Channel 投递
+
+Gateway 模式下，Cron 任务的 `deliver` 功能通过 `channel` 字段路由到对应 Channel：
+
+| `channel` 值 | 投递目标 | 示例 `to` |
+|---|---|---|
+| `"qq"` | QQ 私聊（`to` 为 QQ 号）或群聊（`to` 为群号加 `group:` 前缀） | `"123456789"` / `"group:98765432"` |
+| `"wecom"` | 企业微信 Webhook 推送 | 无需设置 |
+| `"api"` | API Channel 无主动投递能力，忽略 | — |
+
+### Heartbeat 跨 Channel 通知
+
+Heartbeat 结果会通过 MessageRouter 广播到所有有管理员配置的 Channel：
+- QQ：私信所有 `QQBot.AdminUsers`
+- WeCom：通过 `WeCom.WebhookUrl` 发送到企业微信群（需同时配置 `WeCom.WebhookUrl`）
+
+### 向后兼容
+
+`Gateway.Enabled = false`（默认值）时，行为与之前完全一致，按优先级选择单一模块运行。
+
+---
+
 ## 完整配置示例
 
 ```json
@@ -700,6 +775,9 @@ QQ Bot 模式下支持以下斜杠命令（直接在聊天中发送）：
         "Enabled": false,
         "Host": "127.0.0.1",
         "Port": 5880
+    },
+    "Gateway": {
+        "Enabled": false
     },
     "McpServers": []
 }

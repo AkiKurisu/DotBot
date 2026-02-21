@@ -1,7 +1,11 @@
+using System.ClientModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
+using DotBot.Abstractions;
 using DotBot.Agents;
+using DotBot.Api;
 using DotBot.CLI;
+using DotBot.Configuration;
 using DotBot.Context;
 using DotBot.Cron;
 using DotBot.DashBoard;
@@ -18,6 +22,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Hosting;
+using OpenAI;
 using Spectre.Console;
 
 namespace DotBot.Hosting;
@@ -31,11 +36,10 @@ public sealed class ApiHost(
     SkillsLoader skillsLoader,
     PathBlacklist blacklist,
     CronService cronService,
-    McpClientManager mcpClientManager) : IDotBotHost
+    McpClientManager mcpClientManager,
+    ApiApprovalService approvalService) : IDotBotHost
 {
     private AgentFactory _agentFactory = null!;
-    
-    private ApiApprovalService _approvalService = null!;
 
     public async Task RunAsync(CancellationToken cancellationToken = default)
     {
@@ -44,14 +48,27 @@ public sealed class ApiHost(
         var traceStore = sp.GetService<TraceStore>();
         var tokenUsageStore = sp.GetService<TokenUsageStore>();
 
-        var approvalMode = ApiApprovalService.ParseMode(config.Api.ApprovalMode, config.Api.AutoApprove);
-        _approvalService = new ApiApprovalService(approvalMode, config.Api.ApprovalTimeoutSeconds);
-
         _agentFactory = new AgentFactory(
             paths.BotPath, paths.WorkspacePath, config,
-            memoryStore, skillsLoader, _approvalService, blacklist,
-            cronTools: cronTools,
-            mcpClientManager: mcpClientManager.Tools.Count > 0 ? mcpClientManager : null,
+            memoryStore, skillsLoader, approvalService, blacklist,
+            toolProviders: null,
+            toolProviderContext: new ToolProviderContext
+            {
+                Config = config,
+                ChatClient = new OpenAIClient(new ApiKeyCredential(config.ApiKey), new OpenAIClientOptions
+                {
+                    Endpoint = new Uri(config.EndPoint)
+                }).GetChatClient(config.Model),
+                WorkspacePath = paths.WorkspacePath,
+                BotPath = paths.BotPath,
+                MemoryStore = memoryStore,
+                SkillsLoader = skillsLoader,
+                ApprovalService = approvalService,
+                PathBlacklist = blacklist,
+                CronTools = cronTools,
+                McpClientManager = mcpClientManager.Tools.Count > 0 ? mcpClientManager : null,
+                TraceCollector = traceCollector
+            },
             traceCollector: traceCollector);
 
         var tools = _agentFactory.CreateDefaultTools();
@@ -171,6 +188,7 @@ public sealed class ApiHost(
         AnsiConsole.MarkupLine("[grey]  GET  /v1/sessions[/]");
         AnsiConsole.MarkupLine("[grey]  DELETE /v1/sessions/{id}[/]");
 
+        var approvalMode = ApiApprovalService.ParseMode(config.Api.ApprovalMode, config.Api.AutoApprove);
         if (approvalMode == ApiApprovalMode.Interactive)
         {
             AnsiConsole.MarkupLine("[grey]  GET  /v1/approvals[/]");
@@ -256,7 +274,7 @@ public sealed class ApiHost(
             if (!Authenticate(context))
                 return Results.Json(new { error = "unauthorized" }, statusCode: StatusCodes.Status401Unauthorized);
 
-            var pending = _approvalService.PendingApprovals;
+            var pending = approvalService.PendingApprovals;
             var list = pending.Select(a => new
             {
                 id = a.Id,
@@ -289,7 +307,7 @@ public sealed class ApiHost(
                 return Results.Json(new { error = "missing request body" },
                     statusCode: StatusCodes.Status400BadRequest);
 
-            var resolved = _approvalService.Resolve(id, body.Approved);
+            var resolved = approvalService.Resolve(id, body.Approved);
             if (!resolved)
                 return Results.Json(new { error = "approval not found or already resolved" },
                     statusCode: StatusCodes.Status404NotFound);

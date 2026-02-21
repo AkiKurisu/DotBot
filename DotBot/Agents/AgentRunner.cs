@@ -168,7 +168,9 @@ public sealed class AgentRunner(AIAgent agent, SessionStore sessionStore, AgentF
                 traceCollector?.RecordContextCompaction(sessionKey);
             }
         }
-        
+
+        agentFactory?.TryConsolidateMemory(session, sessionKey);
+
         return response;
     }
 }

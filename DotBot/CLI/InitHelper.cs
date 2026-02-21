@@ -1,5 +1,6 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using DotBot.Configuration;
 using DotBot.Localization;
 using Spectre.Console;
 

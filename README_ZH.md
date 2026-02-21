@@ -26,7 +26,7 @@
 
 - 🛠️ **工具能力**: 文件读写（工作区内）、受控 Shell 命令、Web 抓取、可选子智能体（SubAgent）
 - 🔌 **MCP 接入**: 支持通过 [Model Context Protocol](https://modelcontextprotocol.io/) 接入外部工具服务
-- 🎯 **运行形态**: 本地 REPL、QQ 机器人（OneBot V11）、企业微信机器人、API 服务（OpenAI 兼容）
+- 🎯 **运行形态**: 本地 REPL、QQ 机器人（OneBot V11）、企业微信机器人、API 服务（OpenAI 兼容）、**Gateway 多 Channel 并发模式**
 - 📊 **监控面板**: 内置 Web 调试界面，实时监控 Token 使用、会话历史和工具调用追踪
 - 🧩 **技能系统**: 支持动态加载技能
 - 📢 **通知推送**: 企业微信群机器人和 Webhook 推送
@@ -50,6 +50,13 @@
 ## 🚀 快速开始
 
 ```bash
+# 构建 Release 包
+build.bat
+
+# 配置路径到环境变量
+cd Release/DotBot
+bash install_to_path.ps1
+
 # 进入工作区
 cd Workspace
 
@@ -62,7 +69,7 @@ dotbot
 | 文档 | 说明 |
 |------|------|
 | [架构与安全](./Documentation/architecture.md) | 架构设计、安全模型 |
-| [配置指南](./Documentation/config_guide.md) | 工具、安全、黑名单、审批、MCP |
+| [配置指南](./Documentation/config_guide.md) | 工具、安全、黑名单、审批、MCP、Gateway |
 | [API 模式指南](./Documentation/api_guide.md) | OpenAI 兼容 API、工具过滤、SDK 示例 |
 | [QQ 机器人指南](./Documentation/qq_bot_guide.md) | NapCat/权限/审批 |
 | [企业微信指南](./Documentation/wecom_guide.md) | 企业微信推送/机器人模式 |

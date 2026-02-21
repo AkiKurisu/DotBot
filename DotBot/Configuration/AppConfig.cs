@@ -3,7 +3,7 @@ using System.Text.Json.Nodes;
 using DotBot.Localization;
 using DotBot.Mcp;
 
-namespace DotBot;
+namespace DotBot.Configuration;
 
 public sealed class AppConfig
 {
@@ -44,6 +44,14 @@ public sealed class AppConfig
     public int MaxContextTokens { get; set; } = 160000;
 
     /// <summary>
+    /// Number of messages in a session before triggering background memory consolidation.
+    /// When exceeded, old messages are consolidated into MEMORY.md (long-term facts) and
+    /// HISTORY.md (grep-searchable event log) via an LLM call.
+    /// Set to 0 to disable message-count-based consolidation (default: 50).
+    /// </summary>
+    public int MemoryWindow { get; set; } = 50;
+
+    /// <summary>
     /// Enable debug mode to display full tool call arguments without truncation.
     /// Can be toggled at runtime by administrators using /debug command in QQ/WeCom bots.
     /// </summary>
@@ -72,6 +80,8 @@ public sealed class AppConfig
     public ApiConfig Api { get; set; } = new();
 
     public DashBoardConfig DashBoard { get; set; } = new();
+
+    public GatewayConfig Gateway { get; set; } = new();
 
     public List<McpServerConfig> McpServers { get; set; } = [];
 
@@ -357,5 +367,14 @@ public sealed class AppConfig
         public int Port { get; set; } = 5880;
 
         public string Host { get; set; } = "127.0.0.1";
+    }
+
+    public sealed class GatewayConfig
+    {
+        /// <summary>
+        /// When true, all enabled channel modules (QQ, WeCom, API) run concurrently
+        /// in a single process, sharing infrastructure (CronService, HeartbeatService, DashBoard).
+        /// </summary>
+        public bool Enabled { get; set; }
     }
 }

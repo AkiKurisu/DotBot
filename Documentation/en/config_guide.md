@@ -195,7 +195,7 @@ Quick reference:
 | `WeComBot.ApprovalTimeoutSeconds` | Operation approval timeout (seconds) | `60` |
 | `WeComBot.Robots` | Bot configuration list (Path/Token/AesKey) | `[]` |
 
-**Note**: QQ Bot, WeCom Bot, and API mode cannot be enabled simultaneously. Priority order: QQ Bot > WeCom Bot > API > CLI.
+**Note**: By default (`Gateway.Enabled = false`), QQ Bot, WeCom Bot, and API mode cannot be enabled simultaneously. Priority order: QQ Bot > WeCom Bot > API > CLI. To run multiple channels at the same time, enable [Gateway mode](#gateway-multi-channel-concurrent-mode).
 
 **Permission Notes**:
 - `AdminUsers`: Has all permissions; workspace write operations require approval
@@ -620,6 +620,81 @@ QQ Bot mode supports the following slash commands (send directly in chat):
 
 ---
 
+## Gateway Multi-Channel Concurrent Mode
+
+By default, DotBot runs only one channel module at a time (highest-priority wins). **Gateway mode** removes this restriction, allowing QQ Bot, WeCom Bot, and the API service to run concurrently **within the same process**, sharing a single HeartbeatService, CronService, and DashBoard.
+
+### How to Enable
+
+Set `Gateway.Enabled = true` together with all the channel modules you want to run:
+
+```json
+{
+    "Gateway": { "Enabled": true },
+    "QQBot": {
+        "Enabled": true,
+        "Port": 6700,
+        "AdminUsers": [123456789]
+    },
+    "WeComBot": {
+        "Enabled": true,
+        "Port": 9000,
+        "Robots": [{ "Path": "/dotbot", "Token": "your_token", "AesKey": "your_aeskey" }]
+    },
+    "Api": {
+        "Enabled": true,
+        "Port": 8080
+    }
+}
+```
+
+### Configuration
+
+| Config Item | Description | Default |
+|-------------|-------------|---------|
+| `Gateway.Enabled` | Enable Gateway multi-channel concurrent mode | `false` |
+
+### How It Works
+
+When enabled, DotBot will:
+
+1. Select GatewayModule as the primary module (highest priority: 100)
+2. Create an independent AgentFactory, ChannelAdapter, and network listener for each enabled channel (QQ / WeCom / API)
+3. Start all channels concurrently — each channel has its own streaming pipeline and approval workflow
+4. Share a single HeartbeatService and CronService, routing results to the correct channel via MessageRouter
+
+```
+GatewayHost
+├── HeartbeatService (shared — routes notifications per channel)
+├── CronService (shared — routes delivery via Payload.Channel)
+├── DashBoardServer (shared)
+├── QQChannelService    → QQChannelAdapter → Agent (independent)
+├── WeComChannelService → WeComChannelAdapter → Agent (independent)
+└── ApiChannelService   → OpenAI API endpoints → Agent (independent)
+```
+
+### Cron Cross-Channel Delivery
+
+In Gateway mode, the Cron task `deliver` feature routes to the correct channel via the `channel` field:
+
+| `channel` value | Delivery target | Example `to` |
+|---|---|---|
+| `"qq"` | QQ private chat (`to` = QQ number) or group (`to` = group number with `group:` prefix) | `"123456789"` / `"group:98765432"` |
+| `"wecom"` | WeCom Webhook push | (not required) |
+| `"api"` | API channel has no proactive delivery; ignored | — |
+
+### Heartbeat Cross-Channel Notifications
+
+Heartbeat results are broadcast to all channels that have admin configuration:
+- QQ: Private message sent to all `QQBot.AdminUsers`
+- WeCom: Sent to the WeCom group via `WeCom.WebhookUrl` (requires `WeCom.WebhookUrl` to be configured)
+
+### Backward Compatibility
+
+When `Gateway.Enabled = false` (the default), behavior is identical to before — the highest-priority enabled module runs alone.
+
+---
+
 ## Full Configuration Example
 
 ```json
@@ -701,6 +776,9 @@ QQ Bot mode supports the following slash commands (send directly in chat):
         "Host": "127.0.0.1",
         "Port": 5880
     },
-    "McpServers": []
+    "McpServers": [],
+    "Gateway": {
+        "Enabled": false
+    }
 }
 ```

@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using DotBot.Security;
 
-namespace DotBot.Hosting;
+namespace DotBot.Api;
 
 public sealed class PendingApproval
 {
