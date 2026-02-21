@@ -1,4 +1,6 @@
-namespace DotBot.Configuration.Validators;
+using DotBot.Configuration;
+
+namespace DotBot.WeCom;
 
 /// <summary>
 /// Validator for WeCom bot configuration.

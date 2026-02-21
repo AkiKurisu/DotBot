@@ -98,6 +98,7 @@ var hostBuilder = new HostBuilder(moduleRegistry, config, paths);
 
 // Create service collection with core services
 var services = new ServiceCollection()
+    .AddSingleton(moduleRegistry)
     .AddDotBot(config, workspacePath, botPath);
 
 // Create host

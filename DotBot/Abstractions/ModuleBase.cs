@@ -23,4 +23,7 @@ public abstract class ModuleBase : IDotBotModule
         // Default implementation does nothing.
         // Derived classes can override to register module-specific services.
     }
+
+    /// <inheritdoc />
+    public virtual IReadOnlyList<string> ValidateConfig(AppConfig config) => [];
 }

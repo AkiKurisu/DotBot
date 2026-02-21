@@ -1,4 +1,6 @@
-namespace DotBot.Configuration.Validators;
+using DotBot.Configuration;
+
+namespace DotBot.QQ;
 
 /// <summary>
 /// Validator for QQ bot configuration.

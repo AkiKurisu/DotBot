@@ -14,12 +14,14 @@ namespace DotBot.Modules;
 [DotBotModule("wecom", Priority = 20, Description = "WeCom (Enterprise WeChat) module for enterprise messaging platform interaction")]
 public sealed partial class WeComModule : ModuleBase
 {
+    private readonly WeComConfigValidator _validator = new();
+
     /// <inheritdoc />
-    public override bool IsEnabled(AppConfig config)
-    {
-        // Support both old AppConfig access and new module config
-        return config.WeComBot.Enabled;
-    }
+    public override bool IsEnabled(AppConfig config) => config.WeComBot.Enabled;
+
+    /// <inheritdoc />
+    public override IReadOnlyList<string> ValidateConfig(AppConfig config)
+        => _validator.Validate(config.WeComBot);
 
     /// <inheritdoc />
     public override void ConfigureServices(IServiceCollection services, ModuleContext context)

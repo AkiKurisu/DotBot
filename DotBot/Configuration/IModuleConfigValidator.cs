@@ -1,11 +1,11 @@
-namespace DotBot.Configuration.Validators;
+namespace DotBot.Configuration;
 
 /// <summary>
 /// Validates module-specific configuration.
 /// Modules can implement this interface to define their own validation rules.
 /// </summary>
 /// <typeparam name="TConfig">The configuration type to validate.</typeparam>
-public interface IModuleConfigValidator<TConfig> where TConfig : class
+public interface IModuleConfigValidator<in TConfig> where TConfig : class
 {
     /// <summary>
     /// Validates the configuration.

@@ -34,4 +34,11 @@ public interface IDotBotModule
     /// <param name="services">The service collection to register services with.</param>
     /// <param name="context">The module context containing configuration and paths.</param>
     void ConfigureServices(IServiceCollection services, ModuleContext context);
+
+    /// <summary>
+    /// Validates this module's configuration section.
+    /// </summary>
+    /// <param name="config">The application configuration.</param>
+    /// <returns>List of validation errors, empty if valid.</returns>
+    IReadOnlyList<string> ValidateConfig(AppConfig config) => [];
 }

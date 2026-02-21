@@ -14,12 +14,14 @@ namespace DotBot.QQ;
 [DotBotModule("qq", Priority = 30, Description = "QQ Bot module for QQ platform interaction via OneBot protocol")]
 public sealed partial class QQModule : ModuleBase
 {
+    private readonly QQConfigValidator _validator = new();
+
     /// <inheritdoc />
-    public override bool IsEnabled(AppConfig config)
-    {
-        // Support both old AppConfig access and new module config
-        return config.QQBot.Enabled;
-    }
+    public override bool IsEnabled(AppConfig config) => config.QQBot.Enabled;
+
+    /// <inheritdoc />
+    public override IReadOnlyList<string> ValidateConfig(AppConfig config)
+        => _validator.Validate(config.QQBot);
 
     /// <inheritdoc />
     public override void ConfigureServices(IServiceCollection services, ModuleContext context)

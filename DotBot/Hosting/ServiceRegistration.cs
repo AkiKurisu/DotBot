@@ -1,15 +1,14 @@
 using DotBot.Configuration;
-using DotBot.Configuration.Validators;
 using DotBot.Cron;
 using DotBot.DashBoard;
 using DotBot.Localization;
 using DotBot.Mcp;
 using DotBot.Memory;
+using DotBot.Modules;
 using DotBot.Security;
 using DotBot.Skills;
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
-using ModuleRegistry = DotBot.Modules.ModuleRegistry;
 
 namespace DotBot.Hosting;
 
@@ -73,23 +72,12 @@ public static class ServiceRegistration
     /// Validates module configurations and prints diagnostics.
     /// </summary>
     /// <param name="config">The application configuration.</param>
+    /// <param name="moduleRegistry">The module registry whose modules provide their own validators.</param>
     /// <returns>True if all configurations are valid.</returns>
-    public static bool ValidateConfigurations(AppConfig config)
+    public static bool ValidateConfigurations(AppConfig config, ModuleRegistry moduleRegistry)
     {
-        var validator = new ConfigValidator();
-        var validationResults = validator.ValidateAll(config);
-        if (validationResults.Count > 0)
-        {
-            foreach (var (section, errors) in validationResults)
-            {
-                foreach (var error in errors)
-                {
-                    AnsiConsole.MarkupLine($"[yellow][[Config]] Warning: {section} - {Markup.Escape(error)}[/]");
-                }
-            }
-            return false;
-        }
-        return true;
+        var validator = new ConfigValidator(moduleRegistry);
+        return validator.ValidateAndLogErrors(config);
     }
 }
 

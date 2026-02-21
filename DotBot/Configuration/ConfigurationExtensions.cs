@@ -1,4 +1,3 @@
-using DotBot.Configuration.Validators;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DotBot.Configuration;
@@ -10,6 +9,7 @@ public static class ConfigurationExtensions
 {
     /// <summary>
     /// Adds configuration validation services to the service collection.
+    /// Requires <see cref="DotBot.Modules.ModuleRegistry"/> to be registered beforehand.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <returns>The service collection.</returns>
@@ -17,16 +17,5 @@ public static class ConfigurationExtensions
     {
         services.AddSingleton<ConfigValidator>();
         return services;
-    }
-
-    /// <summary>
-    /// Validates all module configurations and logs warnings for invalid settings.
-    /// </summary>
-    /// <param name="config">The application configuration.</param>
-    /// <returns>True if all configurations are valid.</returns>
-    public static bool ValidateAndLogErrors(this AppConfig config)
-    {
-        var validator = new ConfigValidator();
-        return validator.ValidateAndLogErrors(config);
     }
 }
