@@ -180,7 +180,7 @@ public sealed class TraceStore(string? storagePath = null, int maxEventsPerSessi
                         continue;
 
                     var evt = JsonSerializer.Deserialize<TraceEvent>(line, PersistJsonOptions);
-                    if (evt == null) continue;
+                    if (evt == null || string.IsNullOrEmpty(evt.SessionKey)) continue;
 
                     var session = _sessions.GetOrAdd(evt.SessionKey, key => new TraceSession
                     {

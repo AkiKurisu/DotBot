@@ -723,6 +723,8 @@ body {
             <button class="filter-chip active" data-tusrc="all" onclick="setTokenUsageFilter('all')">All</button>
             <button class="filter-chip" data-tusrc="qq" onclick="setTokenUsageFilter('qq')">QQ</button>
             <button class="filter-chip" data-tusrc="wecom" onclick="setTokenUsageFilter('wecom')">WeCom</button>
+            <button class="filter-chip" data-tusrc="api" onclick="setTokenUsageFilter('api')">API</button>
+            <button class="filter-chip" data-tusrc="cli" onclick="setTokenUsageFilter('cli')">CLI</button>
           </div>
           <div id="tokenUsageContent"></div>
         </div>
@@ -1280,6 +1282,8 @@ async function refreshTokenUsage() {
 
   const qqTotal = (summary.qqTotalInputTokens || 0) + (summary.qqTotalOutputTokens || 0);
   const wecomTotal = (summary.weComTotalInputTokens || 0) + (summary.weComTotalOutputTokens || 0);
+  const apiTotal = (summary.apiTotalInputTokens || 0) + (summary.apiTotalOutputTokens || 0);
+  const cliTotal = (summary.cliTotalInputTokens || 0) + (summary.cliTotalOutputTokens || 0);
 
   statsEl.innerHTML = `
     <div class="stat-card"><div class="stat-label">QQ Users (Private)</div><div class="stat-value accent">${summary.qqPrivateUserCount || 0}</div></div>
@@ -1287,7 +1291,10 @@ async function refreshTokenUsage() {
     <div class="stat-card"><div class="stat-label">QQ Total Tokens</div><div class="stat-value warning">${formatNumber(qqTotal)}</div></div>
     <div class="stat-card"><div class="stat-label">WeCom Users</div><div class="stat-value accent">${summary.weComUserCount || 0}</div></div>
     <div class="stat-card"><div class="stat-label">WeCom Total Tokens</div><div class="stat-value success">${formatNumber(wecomTotal)}</div></div>
-    <div class="stat-card"><div class="stat-label">All Total Tokens</div><div class="stat-value success">${formatNumber(qqTotal + wecomTotal)}</div></div>
+    <div class="stat-card"><div class="stat-label">API Users</div><div class="stat-value accent">${summary.apiUserCount || 0}</div></div>
+    <div class="stat-card"><div class="stat-label">API Total Tokens</div><div class="stat-value info">${formatNumber(apiTotal)}</div></div>
+    <div class="stat-card"><div class="stat-label">CLI Total Tokens</div><div class="stat-value warning">${formatNumber(cliTotal)}</div></div>
+    <div class="stat-card"><div class="stat-label">All Total Tokens</div><div class="stat-value success">${formatNumber(qqTotal + wecomTotal + apiTotal + cliTotal)}</div></div>
   `;
 
   let html = '';
@@ -1344,11 +1351,31 @@ async function refreshTokenUsage() {
     }
   }
 
+  if (tokenUsageFilter === 'all' || tokenUsageFilter === 'api') {
+    const apiUsers = await fetchJson('/token-usage/api');
+    html += '<h3 style="margin:16px 0 12px;font-size:15px;color:var(--accent-light)">API Users</h3>';
+    if (apiUsers && apiUsers.length > 0) {
+      html += renderUserTable(apiUsers, 'API');
+    } else {
+      html += '<div style="color:var(--text-muted);font-size:13px;margin-bottom:16px">No API user data yet.</div>';
+    }
+  }
+
+  if (tokenUsageFilter === 'all' || tokenUsageFilter === 'cli') {
+    const cliUsers = await fetchJson('/token-usage/cli');
+    html += '<h3 style="margin:16px 0 12px;font-size:15px;color:var(--accent-light)">CLI Users</h3>';
+    if (cliUsers && cliUsers.length > 0) {
+      html += renderUserTable(cliUsers, 'CLI');
+    } else {
+      html += '<div style="color:var(--text-muted);font-size:13px;margin-bottom:16px">No CLI user data yet.</div>';
+    }
+  }
+
   document.getElementById('tokenUsageContent').innerHTML = html;
 }
 
 function renderUserTable(users, source) {
-  const idLabel = source === 'WeCom' ? 'UID' : 'QQ';
+  const idLabel = source === 'WeCom' ? 'UID' : source === 'API' ? 'Session' : source === 'CLI' ? 'User' : 'QQ';
   let html = `<table class="config-table" style="margin-bottom:16px">
     <thead><tr><th>${idLabel}</th><th>Name</th><th>Input Tokens</th><th>Output Tokens</th><th>Total Tokens</th><th>Requests</th><th>Last Active</th></tr></thead><tbody>`;
   users.forEach(u => {

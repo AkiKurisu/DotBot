@@ -8,7 +8,9 @@ public enum TokenUsageSource
 {
     QQPrivate,
     QQGroup,
-    WeCom
+    WeCom,
+    Api,
+    Cli
 }
 
 public sealed class TokenUsageRecord
@@ -89,26 +91,23 @@ public sealed class GroupTokenUsage
         : DateTimeOffset.MinValue;
 }
 
-public sealed class TokenUsageStore
+public sealed class TokenUsageStore(string? storagePath = null)
 {
-    private readonly string? _storagePath;
-
     private readonly ConcurrentDictionary<string, UserTokenUsage> _qqPrivateUsers = new();
 
     private readonly ConcurrentDictionary<long, GroupTokenUsage> _qqGroups = new();
 
     private readonly ConcurrentDictionary<string, UserTokenUsage> _wecomUsers = new();
 
+    private readonly ConcurrentDictionary<string, UserTokenUsage> _apiUsers = new();
+
+    private readonly ConcurrentDictionary<string, UserTokenUsage> _cliUsers = new();
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = false,
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
-
-    public TokenUsageStore(string? storagePath = null)
-    {
-        _storagePath = storagePath;
-    }
 
     public void Record(TokenUsageRecord record)
     {
@@ -151,9 +150,29 @@ public sealed class TokenUsageStore
                 user.Add(record.InputTokens, record.OutputTokens);
                 break;
             }
+            case TokenUsageSource.Api:
+            {
+                var user = _apiUsers.GetOrAdd(record.UserId, _ => new UserTokenUsage
+                {
+                    UserId = record.UserId
+                });
+                user.DisplayName = record.DisplayName;
+                user.Add(record.InputTokens, record.OutputTokens);
+                break;
+            }
+            case TokenUsageSource.Cli:
+            {
+                var user = _cliUsers.GetOrAdd(record.UserId, _ => new UserTokenUsage
+                {
+                    UserId = record.UserId
+                });
+                user.DisplayName = record.DisplayName;
+                user.Add(record.InputTokens, record.OutputTokens);
+                break;
+            }
         }
 
-        if (_storagePath != null)
+        if (storagePath != null)
             PersistRecord(record);
     }
 
@@ -174,6 +193,20 @@ public sealed class TokenUsageStore
     public IReadOnlyList<UserTokenUsage> GetWeComUsers()
     {
         return _wecomUsers.Values
+            .OrderByDescending(u => u.TotalTokens)
+            .ToList();
+    }
+
+    public IReadOnlyList<UserTokenUsage> GetApiUsers()
+    {
+        return _apiUsers.Values
+            .OrderByDescending(u => u.TotalTokens)
+            .ToList();
+    }
+
+    public IReadOnlyList<UserTokenUsage> GetCliUsers()
+    {
+        return _cliUsers.Values
             .OrderByDescending(u => u.TotalTokens)
             .ToList();
     }
@@ -207,6 +240,26 @@ public sealed class TokenUsageStore
             wecomRequests += u.RequestCount;
         }
 
+        long apiInput = 0, apiOutput = 0;
+        int apiRequests = 0;
+
+        foreach (var u in _apiUsers.Values)
+        {
+            apiInput += u.TotalInputTokens;
+            apiOutput += u.TotalOutputTokens;
+            apiRequests += u.RequestCount;
+        }
+
+        long cliInput = 0, cliOutput = 0;
+        int cliRequests = 0;
+
+        foreach (var u in _cliUsers.Values)
+        {
+            cliInput += u.TotalInputTokens;
+            cliOutput += u.TotalOutputTokens;
+            cliRequests += u.RequestCount;
+        }
+
         return new TokenUsageSummary
         {
             QQTotalInputTokens = qqInput,
@@ -217,16 +270,24 @@ public sealed class TokenUsageStore
             WeComTotalInputTokens = wecomInput,
             WeComTotalOutputTokens = wecomOutput,
             WeComTotalRequests = wecomRequests,
-            WeComUserCount = _wecomUsers.Count
+            WeComUserCount = _wecomUsers.Count,
+            ApiTotalInputTokens = apiInput,
+            ApiTotalOutputTokens = apiOutput,
+            ApiTotalRequests = apiRequests,
+            ApiUserCount = _apiUsers.Count,
+            CliTotalInputTokens = cliInput,
+            CliTotalOutputTokens = cliOutput,
+            CliTotalRequests = cliRequests,
+            CliUserCount = _cliUsers.Count
         };
     }
 
     public void LoadFromDisk()
     {
-        if (_storagePath == null)
+        if (storagePath == null)
             return;
 
-        var filePath = Path.Combine(_storagePath, "token_usage.jsonl");
+        var filePath = Path.Combine(storagePath, "token_usage.jsonl");
         if (!File.Exists(filePath))
             return;
 
@@ -282,6 +343,26 @@ public sealed class TokenUsageStore
                             user.Load(record.InputTokens, record.OutputTokens, 1, record.Timestamp);
                             break;
                         }
+                        case TokenUsageSource.Api:
+                        {
+                            var user = _apiUsers.GetOrAdd(record.UserId, _ => new UserTokenUsage
+                            {
+                                UserId = record.UserId
+                            });
+                            user.DisplayName = record.DisplayName;
+                            user.Load(record.InputTokens, record.OutputTokens, 1, record.Timestamp);
+                            break;
+                        }
+                        case TokenUsageSource.Cli:
+                        {
+                            var user = _cliUsers.GetOrAdd(record.UserId, _ => new UserTokenUsage
+                            {
+                                UserId = record.UserId
+                            });
+                            user.DisplayName = record.DisplayName;
+                            user.Load(record.InputTokens, record.OutputTokens, 1, record.Timestamp);
+                            break;
+                        }
                     }
                 }
                 catch
@@ -302,8 +383,8 @@ public sealed class TokenUsageStore
         {
             try
             {
-                Directory.CreateDirectory(_storagePath!);
-                var filePath = Path.Combine(_storagePath!, "token_usage.jsonl");
+                Directory.CreateDirectory(storagePath!);
+                var filePath = Path.Combine(storagePath!, "token_usage.jsonl");
                 var json = JsonSerializer.Serialize(record, JsonOptions);
                 lock (_fileLock)
                 {
@@ -339,4 +420,20 @@ public sealed class TokenUsageSummary
     public int WeComTotalRequests { get; init; }
 
     public int WeComUserCount { get; init; }
+
+    public long ApiTotalInputTokens { get; init; }
+
+    public long ApiTotalOutputTokens { get; init; }
+
+    public int ApiTotalRequests { get; init; }
+
+    public int ApiUserCount { get; init; }
+
+    public long CliTotalInputTokens { get; init; }
+
+    public long CliTotalOutputTokens { get; init; }
+
+    public int CliTotalRequests { get; init; }
+
+    public int CliUserCount { get; init; }
 }
