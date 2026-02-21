@@ -264,6 +264,38 @@ public static class DashBoardMiddleware
                 });
                 return Results.Json(result, JsonOptions);
             });
+
+            endpoints.MapGet("/dashboard/api/token-usage/api", () =>
+            {
+                var users = tokenUsageStore.GetApiUsers();
+                var result = users.Select(u => new
+                {
+                    userId = u.UserId,
+                    displayName = u.DisplayName,
+                    totalInputTokens = u.TotalInputTokens,
+                    totalOutputTokens = u.TotalOutputTokens,
+                    totalTokens = u.TotalTokens,
+                    requestCount = u.RequestCount,
+                    lastActiveAt = u.LastActiveAt.ToString("o")
+                });
+                return Results.Json(result, JsonOptions);
+            });
+
+            endpoints.MapGet("/dashboard/api/token-usage/cli", () =>
+            {
+                var users = tokenUsageStore.GetCliUsers();
+                var result = users.Select(u => new
+                {
+                    userId = u.UserId,
+                    displayName = u.DisplayName,
+                    totalInputTokens = u.TotalInputTokens,
+                    totalOutputTokens = u.TotalOutputTokens,
+                    totalTokens = u.TotalTokens,
+                    requestCount = u.RequestCount,
+                    lastActiveAt = u.LastActiveAt.ToString("o")
+                });
+                return Results.Json(result, JsonOptions);
+            });
         }
 
         endpoints.MapGet("/dashboard/api/events/stream", async ctx =>

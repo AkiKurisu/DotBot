@@ -153,6 +153,8 @@ public sealed class ApiChannelService : IChannelService
 
         if (traceCollector != null)
         {
+            var capturedTraceStore = _sp.GetService<TraceStore>();
+            var capturedTokenUsageStore = _sp.GetService<TokenUsageStore>();
             _webApp.Use(async (context, next) =>
             {
                 var path = context.Request.Path.Value ?? "";
@@ -162,12 +164,34 @@ public sealed class ApiChannelService : IChannelService
                                      ?? $"api:{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid().ToString("N")[..8]}";
                     TracingChatClient.CurrentSessionKey = sessionKey;
                     TracingChatClient.ResetCallState(sessionKey);
+
+                    var inputBefore = capturedTraceStore?.GetSession(sessionKey)?.TotalInputTokens ?? 0;
+                    var outputBefore = capturedTraceStore?.GetSession(sessionKey)?.TotalOutputTokens ?? 0;
+
                     try
                     {
                         await next();
                     }
                     finally
                     {
+                        if (capturedTokenUsageStore != null && capturedTraceStore != null)
+                        {
+                            var session = capturedTraceStore.GetSession(sessionKey);
+                            var inputDelta = (session?.TotalInputTokens ?? 0) - inputBefore;
+                            var outputDelta = (session?.TotalOutputTokens ?? 0) - outputBefore;
+                            if (inputDelta > 0 || outputDelta > 0)
+                            {
+                                capturedTokenUsageStore.Record(new TokenUsageRecord
+                                {
+                                    Source = TokenUsageSource.Api,
+                                    UserId = sessionKey,
+                                    DisplayName = sessionKey,
+                                    InputTokens = inputDelta,
+                                    OutputTokens = outputDelta
+                                });
+                            }
+                        }
+
                         TracingChatClient.ResetCallState(sessionKey);
                         TracingChatClient.CurrentSessionKey = null;
                     }

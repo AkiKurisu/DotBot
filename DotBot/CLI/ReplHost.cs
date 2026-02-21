@@ -22,7 +22,7 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
     HeartbeatService? heartbeatService = null, CronService? cronService = null,
     AgentFactory? agentFactory = null, McpClientManager? mcpClientManager = null,
     TraceCollector? traceCollector = null, string? dashBoardUrl = null,
-    LanguageService? languageService = null)
+    LanguageService? languageService = null, TokenUsageStore? tokenUsageStore = null)
 {
     private readonly AppConfig _config = config ?? new AppConfig();
     private readonly LanguageService _lang = languageService ?? new LanguageService();
@@ -607,7 +607,17 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
                 {
                     traceCollector.RecordResponse(_currentSessionId, responseBuffer.Length > 0 ? responseBuffer.ToString() : null);
                     if (inputTokens > 0 || outputTokens > 0)
+                    {
                         traceCollector.RecordTokenUsage(_currentSessionId, inputTokens, outputTokens);
+                        tokenUsageStore?.Record(new TokenUsageRecord
+                        {
+                            Source = TokenUsageSource.Cli,
+                            UserId = "local",
+                            DisplayName = "CLI",
+                            InputTokens = inputTokens,
+                            OutputTokens = outputTokens
+                        });
+                    }
                 }
 
                 return true;
