@@ -1,7 +1,7 @@
 using DotBot.Abstractions;
 using Microsoft.Extensions.AI;
 
-namespace DotBot.Tools.Providers.System;
+namespace DotBot.Mcp;
 
 /// <summary>
 /// Provides MCP (Model Context Protocol) tools from external servers.

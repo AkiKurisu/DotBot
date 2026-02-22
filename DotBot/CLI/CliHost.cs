@@ -1,11 +1,11 @@
 using System.ClientModel;
 using DotBot.Abstractions;
 using DotBot.Agents;
-using DotBot.CLI;
 using DotBot.Configuration;
 using DotBot.Cron;
 using DotBot.DashBoard;
 using DotBot.Heartbeat;
+using DotBot.Hosting;
 using DotBot.Localization;
 using DotBot.Mcp;
 using DotBot.Memory;
@@ -14,7 +14,7 @@ using DotBot.Skills;
 using Microsoft.Extensions.DependencyInjection;
 using OpenAI;
 
-namespace DotBot.Hosting;
+namespace DotBot.CLI;
 
 public sealed class CliHost(
     IServiceProvider sp,

@@ -3,29 +3,29 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using DotBot.Abstractions;
 using DotBot.Agents;
-using DotBot.Api;
 using DotBot.CLI;
 using DotBot.Configuration;
 using DotBot.Context;
 using DotBot.Cron;
 using DotBot.DashBoard;
 using DotBot.Heartbeat;
+using DotBot.Hosting;
 using DotBot.Mcp;
 using DotBot.Memory;
 using DotBot.Security;
 using DotBot.Skills;
+using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Hosting;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.Agents.AI;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using OpenAI;
 using Spectre.Console;
 
-namespace DotBot.Hosting;
+namespace DotBot.Api;
 
 public sealed class ApiHost(
     IServiceProvider sp,

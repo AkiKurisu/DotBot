@@ -1,17 +1,18 @@
 using DotBot.Abstractions;
 using DotBot.Agents;
+using DotBot.Api;
 using DotBot.Configuration;
 using DotBot.Cron;
 using DotBot.DashBoard;
-using DotBot.Gateway;
 using DotBot.Heartbeat;
+using DotBot.Hosting;
 using DotBot.Memory;
 using DotBot.Security;
 using DotBot.Skills;
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
 
-namespace DotBot.Hosting;
+namespace DotBot.Gateway;
 
 /// <summary>
 /// Hosts multiple channel services concurrently (QQ, WeCom, API) sharing
@@ -63,7 +64,7 @@ public sealed class GatewayHost : IDotBotHost
         DashBoardServer? dashBoardServer = null;
         if (_config.DashBoard.Enabled && traceStore != null)
         {
-            var apiChannel = _channels.OfType<DotBot.Gateway.ApiChannelService>().FirstOrDefault();
+            var apiChannel = _channels.OfType<ApiChannelService>().FirstOrDefault();
             if (apiChannel != null)
             {
                 var capturedTraceStore = traceStore;

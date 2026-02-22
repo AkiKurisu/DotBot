@@ -5,16 +5,16 @@ using DotBot.Configuration;
 using DotBot.Cron;
 using DotBot.DashBoard;
 using DotBot.Heartbeat;
+using DotBot.Hosting;
 using DotBot.Mcp;
 using DotBot.Memory;
-using DotBot.QQ;
 using DotBot.Security;
 using DotBot.Skills;
 using Microsoft.Extensions.DependencyInjection;
 using OpenAI;
 using Spectre.Console;
 
-namespace DotBot.Hosting;
+namespace DotBot.QQ;
 
 public sealed class QQBotHost(
     IServiceProvider sp,

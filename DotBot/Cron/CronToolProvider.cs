@@ -1,7 +1,7 @@
 using DotBot.Abstractions;
 using Microsoft.Extensions.AI;
 
-namespace DotBot.Tools.Providers.System;
+namespace DotBot.Cron;
 
 /// <summary>
 /// Provides Cron (scheduled task) tools.

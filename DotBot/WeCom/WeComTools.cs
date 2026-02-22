@@ -2,9 +2,8 @@ using System.ComponentModel;
 using System.Text;
 using System.Text.Json;
 using DotBot.Attributes;
-using DotBot.WeCom;
 
-namespace DotBot.Tools;
+namespace DotBot.WeCom;
 
 /// <summary>
 /// WeCom (企业微信) group bot webhook tools.

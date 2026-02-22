@@ -3,7 +3,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using DotBot.Abstractions;
 using DotBot.Agents;
-using DotBot.Api;
 using DotBot.CLI;
 using DotBot.Configuration;
 using DotBot.Context;
@@ -25,7 +24,7 @@ using Microsoft.Extensions.Hosting;
 using OpenAI;
 using Spectre.Console;
 
-namespace DotBot.Gateway;
+namespace DotBot.Api;
 
 /// <summary>
 /// Gateway channel service for OpenAI-compatible HTTP API.
