@@ -1,6 +1,5 @@
 using DotBot.Abstractions;
 using DotBot.Configuration;
-using Spectre.Console;
 
 namespace DotBot.Modules;
 
@@ -89,40 +88,5 @@ public sealed partial class ModuleRegistry
     public IHostFactory? GetHostFactory(string moduleName)
     {
         return _hostFactories.GetValueOrDefault(moduleName);
-    }
-
-    /// <summary>
-    /// Prints diagnostic information about registered and enabled modules.
-    /// </summary>
-    /// <param name="config">The application configuration.</param>
-    public void PrintDiagnostics(AppConfig config)
-    {
-        // Print all registered modules
-        AnsiConsole.MarkupLine("[grey]  Registered modules:[/]");
-        foreach (var module in _modules.OrderBy(m => m.Name))
-        {
-            var isEnabled = module.IsEnabled(config);
-            var status = isEnabled ? "[green]enabled[/]" : "[grey]disabled[/]";
-            AnsiConsole.MarkupLine($"[grey]    - {module.Name} (priority: {module.Priority}): {status}[/]");
-        }
-
-        // Print enabled modules
-        var enabledModules = GetEnabledModules(config);
-        if (enabledModules.Count > 0)
-        {
-            AnsiConsole.MarkupLine("[grey]  Enabled modules (sorted by priority):[/]");
-            foreach (var module in enabledModules)
-            {
-                AnsiConsole.MarkupLine($"[grey]    - {module.Name} (priority: {module.Priority})[/]");
-            }
-
-            // Print selected primary module
-            var primary = enabledModules.First();
-            AnsiConsole.MarkupLine($"[green]  Primary module selected: {primary.Name}[/]");
-        }
-        else
-        {
-            AnsiConsole.MarkupLine("[yellow]  No modules enabled - defaulting to CLI mode[/]");
-        }
     }
 }
