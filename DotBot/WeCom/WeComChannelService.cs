@@ -4,6 +4,7 @@ using DotBot.Agents;
 using DotBot.Configuration;
 using DotBot.Cron;
 using DotBot.DashBoard;
+using DotBot.Heartbeat;
 using DotBot.Hosting;
 using DotBot.Mcp;
 using DotBot.Memory;
@@ -41,6 +42,12 @@ public sealed class WeComChannelService : IChannelService
     private WeComChannelAdapter? _adapter;
 
     public string Name => "wecom";
+
+    /// <inheritdoc />
+    public HeartbeatService? HeartbeatService { get; set; }
+
+    /// <inheritdoc />
+    public CronService? CronService { get; set; }
 
     public WeComChannelService(
         IServiceProvider sp,
@@ -112,8 +119,8 @@ public sealed class WeComChannelService : IChannelService
         _adapter = new WeComChannelAdapter(
             agent, _sessionStore, _registry,
             _permissionService, _wecomApprovalService,
-            heartbeatService: null,
-            cronService: null,
+            heartbeatService: HeartbeatService,
+            cronService: CronService,
             agentFactory: agentFactory,
             traceCollector: traceCollector,
             tokenUsageStore: tokenUsageStore);

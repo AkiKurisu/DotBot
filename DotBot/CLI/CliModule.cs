@@ -20,11 +20,8 @@ public sealed partial class CliModule : ModuleBase
     /// <inheritdoc />
     public override bool IsEnabled(AppConfig config)
     {
-        // CLI is enabled only when no other modules are active
-        return !config.Gateway.Enabled
-               && !config.QQBot.Enabled
-               && !config.WeComBot.Enabled
-               && !config.Api.Enabled;
+        // CLI is the fallback mode when no channel is active
+        return !config.QQBot.Enabled && !config.WeComBot.Enabled && !config.Api.Enabled;
     }
 
     /// <inheritdoc />

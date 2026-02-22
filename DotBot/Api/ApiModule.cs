@@ -1,7 +1,6 @@
 using DotBot.Abstractions;
 using DotBot.Api.Factories;
 using DotBot.Configuration;
-using DotBot.Hosting;
 using DotBot.Modules;
 using DotBot.Tools;
 using Microsoft.Extensions.DependencyInjection;
@@ -51,17 +50,4 @@ public sealed partial class ApiModule : ModuleBase
     /// <inheritdoc />
     public override IChannelService? CreateChannelService(IServiceProvider sp, ModuleContext context)
         => ActivatorUtilities.CreateInstance<ApiChannelService>(sp);
-}
-
-/// <summary>
-/// Host factory for API mode.
-/// </summary>
-[HostFactory("api")]
-public sealed class ApiHostFactory : IHostFactory
-{
-    /// <inheritdoc />
-    public IDotBotHost CreateHost(IServiceProvider serviceProvider, ModuleContext context)
-    {
-        return ActivatorUtilities.CreateInstance<ApiHost>(serviceProvider);
-    }
 }

@@ -8,6 +8,7 @@ using DotBot.Configuration;
 using DotBot.Context;
 using DotBot.Cron;
 using DotBot.DashBoard;
+using DotBot.Heartbeat;
 using DotBot.Hosting;
 using DotBot.Mcp;
 using DotBot.Memory;
@@ -49,6 +50,12 @@ public sealed class ApiChannelService : IChannelService
     private AgentFactory? _agentFactory;
 
     public string Name => "api";
+
+    /// <inheritdoc />
+    public HeartbeatService? HeartbeatService { get; set; }
+
+    /// <inheritdoc />
+    public CronService? CronService { get; set; }
 
     /// <summary>
     /// Optional callback invoked by GatewayHost to inject additional routes (e.g. dashboard)

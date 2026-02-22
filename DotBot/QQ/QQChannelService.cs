@@ -4,6 +4,7 @@ using DotBot.Agents;
 using DotBot.Configuration;
 using DotBot.Cron;
 using DotBot.DashBoard;
+using DotBot.Heartbeat;
 using DotBot.Hosting;
 using DotBot.Mcp;
 using DotBot.Memory;
@@ -39,6 +40,12 @@ public sealed class QQChannelService : IChannelService
     private QQChannelAdapter? _adapter;
 
     public string Name => "qq";
+
+    /// <inheritdoc />
+    public HeartbeatService? HeartbeatService { get; set; }
+
+    /// <inheritdoc />
+    public CronService? CronService { get; set; }
 
     public QQChannelService(
         IServiceProvider sp,
@@ -111,8 +118,8 @@ public sealed class QQChannelService : IChannelService
         _adapter = new QQChannelAdapter(
             _qqClient, agent, _sessionStore,
             _permissionService, _qqApprovalService,
-            heartbeatService: null,
-            cronService: null,
+            heartbeatService: HeartbeatService,
+            cronService: CronService,
             agentFactory: agentFactory,
             traceCollector: traceCollector,
             tokenUsageStore: tokenUsageStore);

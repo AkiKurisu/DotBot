@@ -1,6 +1,5 @@
 using DotBot.Abstractions;
 using DotBot.Configuration;
-using DotBot.Hosting;
 using DotBot.Modules;
 using DotBot.QQ.Factories;
 using Microsoft.Extensions.DependencyInjection;
@@ -58,17 +57,4 @@ public sealed partial class QQModule : ModuleBase
     /// <inheritdoc />
     public override IChannelService? CreateChannelService(IServiceProvider sp, ModuleContext context)
         => ActivatorUtilities.CreateInstance<QQChannelService>(sp);
-}
-
-/// <summary>
-/// Host factory for QQ mode.
-/// </summary>
-[HostFactory("qq")]
-public sealed class QQHostFactory : IHostFactory
-{
-    /// <inheritdoc />
-    public IDotBotHost CreateHost(IServiceProvider serviceProvider, ModuleContext context)
-    {
-        return ActivatorUtilities.CreateInstance<QQBotHost>(serviceProvider);
-    }
 }

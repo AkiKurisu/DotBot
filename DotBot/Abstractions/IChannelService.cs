@@ -1,3 +1,6 @@
+using DotBot.Cron;
+using DotBot.Heartbeat;
+
 namespace DotBot.Abstractions;
 
 /// <summary>
@@ -10,6 +13,18 @@ public interface IChannelService : IAsyncDisposable
     /// Gets the unique name of this channel (e.g., "qq", "wecom", "api").
     /// </summary>
     string Name { get; }
+
+    /// <summary>
+    /// The shared HeartbeatService injected by GatewayHost before the channel starts.
+    /// Allows slash commands (/heartbeat) to operate within this channel.
+    /// </summary>
+    HeartbeatService? HeartbeatService { get; set; }
+
+    /// <summary>
+    /// The shared CronService injected by GatewayHost before the channel starts.
+    /// Allows slash commands (/cron) to operate within this channel.
+    /// </summary>
+    CronService? CronService { get; set; }
 
     /// <summary>
     /// Starts the channel service. This is a long-running task that completes

@@ -20,7 +20,6 @@ namespace DotBot.Gateway;
 /// <summary>
 /// Hosts multiple channel services concurrently (QQ, WeCom, API) sharing
 /// a single CronService, HeartbeatService, and DashBoardServer instance.
-/// Enabled when <see cref="AppConfig.GatewayConfig.Enabled"/> is true.
 /// </summary>
 public sealed class GatewayHost : IDotBotHost
 {
@@ -128,6 +127,13 @@ public sealed class GatewayHost : IDotBotHost
                 }
             }
         };
+
+        // Inject shared services into channels so slash commands (/heartbeat, /cron) work
+        foreach (var ch in _channels)
+        {
+            ch.HeartbeatService = heartbeatService;
+            ch.CronService = _cronService;
+        }
 
         if (_config.Heartbeat.Enabled)
         {
