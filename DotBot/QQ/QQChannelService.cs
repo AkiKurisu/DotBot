@@ -4,25 +4,25 @@ using DotBot.Agents;
 using DotBot.Configuration;
 using DotBot.Cron;
 using DotBot.DashBoard;
+using DotBot.Heartbeat;
 using DotBot.Hosting;
 using DotBot.Mcp;
 using DotBot.Memory;
+using DotBot.Modules;
 using DotBot.Security;
 using DotBot.Skills;
 using DotBot.Tools;
-using DotBot.WeCom;
-using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using OpenAI;
 using Spectre.Console;
 
-namespace DotBot.Gateway;
+namespace DotBot.QQ;
 
 /// <summary>
-/// Gateway channel service for WeCom Bot. Manages the ASP.NET Core HTTP server,
+/// Gateway channel service for QQ Bot. Manages the QQ WebSocket connection,
 /// channel adapter, and agent lifecycle as part of a multi-channel gateway.
 /// </summary>
-public sealed class WeComChannelService : IChannelService
+public sealed class QQChannelService : IChannelService
 {
     private readonly IServiceProvider _sp;
     private readonly AppConfig _config;
@@ -32,16 +32,22 @@ public sealed class WeComChannelService : IChannelService
     private readonly SkillsLoader _skillsLoader;
     private readonly PathBlacklist _blacklist;
     private readonly McpClientManager _mcpClientManager;
-    private readonly WeComBotRegistry _registry;
-    private readonly WeComPermissionService _permissionService;
-    private readonly WeComApprovalService _wecomApprovalService;
+    private readonly QQBotClient _qqClient;
+    private readonly QQPermissionService _permissionService;
+    private readonly QQApprovalService _qqApprovalService;
+    private readonly ModuleRegistry _moduleRegistry;
 
-    private WebApplication? _webApp;
-    private WeComChannelAdapter? _adapter;
+    private QQChannelAdapter? _adapter;
 
-    public string Name => "wecom";
+    public string Name => "qq";
 
-    public WeComChannelService(
+    /// <inheritdoc />
+    public HeartbeatService? HeartbeatService { get; set; }
+
+    /// <inheritdoc />
+    public CronService? CronService { get; set; }
+
+    public QQChannelService(
         IServiceProvider sp,
         AppConfig config,
         DotBotPaths paths,
@@ -50,9 +56,10 @@ public sealed class WeComChannelService : IChannelService
         SkillsLoader skillsLoader,
         PathBlacklist blacklist,
         McpClientManager mcpClientManager,
-        WeComBotRegistry registry,
-        WeComPermissionService permissionService,
-        WeComApprovalService wecomApprovalService)
+        QQBotClient qqClient,
+        QQPermissionService permissionService,
+        QQApprovalService qqApprovalService,
+        ModuleRegistry moduleRegistry)
     {
         _sp = sp;
         _config = config;
@@ -62,9 +69,10 @@ public sealed class WeComChannelService : IChannelService
         _skillsLoader = skillsLoader;
         _blacklist = blacklist;
         _mcpClientManager = mcpClientManager;
-        _registry = registry;
+        _qqClient = qqClient;
         _permissionService = permissionService;
-        _wecomApprovalService = wecomApprovalService;
+        _qqApprovalService = qqApprovalService;
+        _moduleRegistry = moduleRegistry;
     }
 
     private AgentFactory BuildAgentFactory()
@@ -72,10 +80,13 @@ public sealed class WeComChannelService : IChannelService
         var cronTools = _sp.GetService<CronTools>();
         var traceCollector = _sp.GetService<TraceCollector>();
 
+        // Collect tool providers from modules
+        var toolProviders = ToolProviderCollector.Collect(_moduleRegistry, _config);
+
         return new AgentFactory(
             _paths.BotPath, _paths.WorkspacePath, _config,
-            _memoryStore, _skillsLoader, _wecomApprovalService, _blacklist,
-            toolProviders: null,
+            _memoryStore, _skillsLoader, _qqApprovalService, _blacklist,
+            toolProviders: toolProviders,
             toolProviderContext: new ToolProviderContext
             {
                 Config = _config,
@@ -87,11 +98,12 @@ public sealed class WeComChannelService : IChannelService
                 BotPath = _paths.BotPath,
                 MemoryStore = _memoryStore,
                 SkillsLoader = _skillsLoader,
-                ApprovalService = _wecomApprovalService,
+                ApprovalService = _qqApprovalService,
                 PathBlacklist = _blacklist,
                 CronTools = cronTools,
                 McpClientManager = _mcpClientManager.Tools.Count > 0 ? _mcpClientManager : null,
-                TraceCollector = traceCollector
+                TraceCollector = traceCollector,
+                ChannelClient = _qqClient
             },
             traceCollector: traceCollector);
     }
@@ -103,32 +115,20 @@ public sealed class WeComChannelService : IChannelService
         var traceCollector = _sp.GetService<TraceCollector>();
         var tokenUsageStore = _sp.GetService<TokenUsageStore>();
 
-        _adapter = new WeComChannelAdapter(
-            agent, _sessionStore, _registry,
-            _permissionService, _wecomApprovalService,
-            heartbeatService: null,
-            cronService: null,
+        _adapter = new QQChannelAdapter(
+            _qqClient, agent, _sessionStore,
+            _permissionService, _qqApprovalService,
+            heartbeatService: HeartbeatService,
+            cronService: CronService,
             agentFactory: agentFactory,
             traceCollector: traceCollector,
             tokenUsageStore: tokenUsageStore);
 
-        var builder = WebApplication.CreateBuilder();
-        _webApp = builder.Build();
+        await _qqClient.StartAsync(cancellationToken);
 
-        var logger = new WeComServerLogger();
-        var server = new WeComBotServer(_registry, logger: logger);
-        server.MapRoutes(_webApp);
+        AnsiConsole.MarkupLine(
+            $"[green][[Gateway]][/] QQ Bot listening on ws://{_config.QQBot.Host}:{_config.QQBot.Port}/");
 
-        var url = $"https://{_config.WeComBot.Host}:{_config.WeComBot.Port}";
-        AnsiConsole.MarkupLine($"[green][[Gateway]][/] WeCom Bot listening on {Markup.Escape(url)}");
-        foreach (var path in _registry.GetAllPaths())
-        {
-            AnsiConsole.MarkupLine($"[grey]  - {Markup.Escape(url + path)}[/]");
-        }
-
-        _ = _webApp.RunAsync(url);
-
-        // Wait for cancellation
         var tcs = new TaskCompletionSource();
         await using var reg = cancellationToken.Register(() => tcs.TrySetResult());
         await tcs.Task;
@@ -138,26 +138,29 @@ public sealed class WeComChannelService : IChannelService
 
     public async Task StopAsync()
     {
-        if (_webApp != null)
-            await _webApp.StopAsync();
+        await _qqClient.StopAsync();
     }
 
-    public Task DeliverMessageAsync(string target, string content)
+    public async Task DeliverMessageAsync(string target, string content)
     {
-        // WeCom delivery uses the outgoing webhook URL (no per-target routing in bot webhook mode)
-        if (!string.IsNullOrWhiteSpace(_config.WeCom.WebhookUrl))
+        // target is either "group:<groupId>" for group messages or a plain user id for private
+        if (target.StartsWith("group:", StringComparison.OrdinalIgnoreCase))
         {
-            var wecomTools = new WeComTools(_config.WeCom.WebhookUrl);
-            return wecomTools.SendTextAsync(content);
+            var groupIdStr = target["group:".Length..];
+            if (long.TryParse(groupIdStr, out var groupId))
+            {
+                await _qqClient.SendGroupMessageAsync(groupId, content);
+                return;
+            }
         }
-        return Task.CompletedTask;
+
+        if (long.TryParse(target, out var userId))
+            await _qqClient.SendPrivateMessageAsync(userId, content);
     }
 
     public async ValueTask DisposeAsync()
     {
         if (_adapter != null)
             await _adapter.DisposeAsync();
-        if (_webApp != null)
-            await _webApp.DisposeAsync();
     }
 }

@@ -1,8 +1,7 @@
 using DotBot.Abstractions;
-using DotBot.QQ;
 using Microsoft.Extensions.AI;
 
-namespace DotBot.Tools.Providers.Channels;
+namespace DotBot.QQ;
 
 /// <summary>
 /// Provides QQ channel-specific tools for voice and file messaging.

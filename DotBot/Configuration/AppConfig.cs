@@ -81,8 +81,6 @@ public sealed class AppConfig
 
     public DashBoardConfig DashBoard { get; set; } = new();
 
-    public GatewayConfig Gateway { get; set; } = new();
-
     public List<McpServerConfig> McpServers { get; set; } = [];
 
     public static AppConfig Load(string path)
@@ -367,14 +365,5 @@ public sealed class AppConfig
         public int Port { get; set; } = 5880;
 
         public string Host { get; set; } = "127.0.0.1";
-    }
-
-    public sealed class GatewayConfig
-    {
-        /// <summary>
-        /// When true, all enabled channel modules (QQ, WeCom, API) run concurrently
-        /// in a single process, sharing infrastructure (CronService, HeartbeatService, DashBoard).
-        /// </summary>
-        public bool Enabled { get; set; }
     }
 }

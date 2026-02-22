@@ -15,7 +15,8 @@ namespace DotBot.Gateway;
 public sealed partial class GatewayModule : ModuleBase
 {
     /// <inheritdoc />
-    public override bool IsEnabled(AppConfig config) => config.Gateway.Enabled;
+    public override bool IsEnabled(AppConfig config)
+        => config.QQBot.Enabled || config.WeComBot.Enabled || config.Api.Enabled;
 
     /// <inheritdoc />
     public override void ConfigureServices(IServiceCollection services, ModuleContext context)
@@ -71,6 +72,7 @@ public sealed class GatewayHostFactory : IHostFactory
             sp.GetRequiredService<Skills.SkillsLoader>(),
             sp.GetRequiredService<Cron.CronService>(),
             channelServices,
-            router);
+            router,
+            registry);
     }
 }

@@ -4,6 +4,7 @@ using DotBot.Configuration;
 using DotBot.Hosting;
 using DotBot.Modules;
 using DotBot.Security;
+using DotBot.Tools;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DotBot.CLI;
@@ -19,11 +20,8 @@ public sealed partial class CliModule : ModuleBase
     /// <inheritdoc />
     public override bool IsEnabled(AppConfig config)
     {
-        // CLI is enabled only when no other modules are active
-        return !config.Gateway.Enabled
-               && !config.QQBot.Enabled
-               && !config.WeComBot.Enabled
-               && !config.Api.Enabled;
+        // CLI is the fallback mode when no channel is active
+        return !config.QQBot.Enabled && !config.WeComBot.Enabled && !config.Api.Enabled;
     }
 
     /// <inheritdoc />
@@ -42,6 +40,10 @@ public sealed partial class CliModule : ModuleBase
             });
         });
     }
+
+    /// <inheritdoc />
+    public override IEnumerable<IAgentToolProvider> GetToolProviders()
+        => [new CoreToolProvider()];
 }
 
 /// <summary>

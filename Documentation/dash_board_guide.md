@@ -314,7 +314,6 @@ DashBoard 通过 `http://localhost:8080/dashboard` 访问（集成到 API 服务
 
 ## 相关文档
 
-- [架构与安全](./architecture.md) - 架构设计、安全模型
 - [配置指南](./config_guide.md) - 完整配置项说明
 - [API 模式指南](./api_guide.md) - OpenAI 兼容 API 服务
 - [QQ 机器人指南](./qq_bot_guide.md) - QQ 机器人模式

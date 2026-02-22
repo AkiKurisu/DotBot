@@ -637,7 +637,6 @@ For complete Python usage examples, see the [`Samples/python/`](../../Samples/py
 
 ## Related Documentation
 
-- [Architecture & Security](./architecture.md) - Architecture design, security model
 - [Configuration Guide](./config_guide.md) - Complete configuration reference
 - [QQ Bot Guide](./qq_bot_guide.md) - QQ Bot mode
 - [WeCom Guide](./wecom_guide.md) - WeCom Bot mode

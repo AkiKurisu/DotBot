@@ -3,17 +3,19 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using DotBot.Abstractions;
 using DotBot.Agents;
-using DotBot.Api;
 using DotBot.CLI;
 using DotBot.Configuration;
 using DotBot.Context;
 using DotBot.Cron;
 using DotBot.DashBoard;
+using DotBot.Heartbeat;
 using DotBot.Hosting;
 using DotBot.Mcp;
 using DotBot.Memory;
+using DotBot.Modules;
 using DotBot.Security;
 using DotBot.Skills;
+using DotBot.Tools;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Hosting;
 using Microsoft.AspNetCore.Builder;
@@ -25,7 +27,7 @@ using Microsoft.Extensions.Hosting;
 using OpenAI;
 using Spectre.Console;
 
-namespace DotBot.Gateway;
+namespace DotBot.Api;
 
 /// <summary>
 /// Gateway channel service for OpenAI-compatible HTTP API.
@@ -42,11 +44,18 @@ public sealed class ApiChannelService : IChannelService
     private readonly PathBlacklist _blacklist;
     private readonly McpClientManager _mcpClientManager;
     private readonly ApiApprovalService _approvalService;
+    private readonly ModuleRegistry _moduleRegistry;
 
     private WebApplication? _webApp;
     private AgentFactory? _agentFactory;
 
     public string Name => "api";
+
+    /// <inheritdoc />
+    public HeartbeatService? HeartbeatService { get; set; }
+
+    /// <inheritdoc />
+    public CronService? CronService { get; set; }
 
     /// <summary>
     /// Optional callback invoked by GatewayHost to inject additional routes (e.g. dashboard)
@@ -63,7 +72,8 @@ public sealed class ApiChannelService : IChannelService
         SkillsLoader skillsLoader,
         PathBlacklist blacklist,
         McpClientManager mcpClientManager,
-        ApiApprovalService approvalService)
+        ApiApprovalService approvalService,
+        ModuleRegistry moduleRegistry)
     {
         _sp = sp;
         _config = config;
@@ -74,6 +84,7 @@ public sealed class ApiChannelService : IChannelService
         _blacklist = blacklist;
         _mcpClientManager = mcpClientManager;
         _approvalService = approvalService;
+        _moduleRegistry = moduleRegistry;
     }
 
     private AgentFactory BuildAgentFactory()
@@ -81,10 +92,13 @@ public sealed class ApiChannelService : IChannelService
         var cronTools = _sp.GetService<CronTools>();
         var traceCollector = _sp.GetService<TraceCollector>();
 
+        // Collect tool providers from modules
+        var toolProviders = ToolProviderCollector.Collect(_moduleRegistry, _config);
+
         return new AgentFactory(
             _paths.BotPath, _paths.WorkspacePath, _config,
             _memoryStore, _skillsLoader, _approvalService, _blacklist,
-            toolProviders: null,
+            toolProviders: toolProviders,
             toolProviderContext: new ToolProviderContext
             {
                 Config = _config,

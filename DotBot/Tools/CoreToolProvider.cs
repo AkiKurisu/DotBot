@@ -2,7 +2,7 @@ using DotBot.Abstractions;
 using DotBot.Agents;
 using Microsoft.Extensions.AI;
 
-namespace DotBot.Tools.Providers.Core;
+namespace DotBot.Tools;
 
 /// <summary>
 /// Provides core tools: file operations, shell execution, web tools, and agent spawning.

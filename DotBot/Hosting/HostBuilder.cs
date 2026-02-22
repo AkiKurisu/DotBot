@@ -80,9 +80,6 @@ public sealed class HostBuilder
     /// <returns>A tuple containing the service provider and the host.</returns>
     public (IServiceProvider Provider, IDotBotHost Host) Build(IServiceCollection services)
     {
-        // Print module diagnostics
-        _registry.PrintDiagnostics(_config);
-        
         // Select primary module
         var primaryModule = _registry.SelectPrimaryModule(_config);
         if (primaryModule == null)

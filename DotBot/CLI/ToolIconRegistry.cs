@@ -4,7 +4,8 @@ using DotBot.Attributes;
 namespace DotBot.CLI;
 
 /// <summary>
-/// Registry for managing tool icons from ToolIconAttribute
+/// Registry for managing tool icons from ToolIconAttribute.
+/// Supports scanning assemblies to discover tool icons without creating tool instances.
 /// </summary>
 public static class ToolIconRegistry
 {
@@ -12,50 +13,64 @@ public static class ToolIconRegistry
     
     private static readonly Lock LockObject = new();
     
-    private static bool _initialized;
+    private static readonly HashSet<Assembly> ScannedAssemblies = [];
     
     private const string DefaultIcon = "🔧";
 
     /// <summary>
-    /// Initialize registry by scanning tool class instances for ToolIconAttribute
+    /// Scans an assembly for tool methods decorated with ToolIconAttribute.
+    /// This method does not require creating tool instances.
     /// </summary>
-    public static void Initialize(params object[] toolInstances)
+    /// <param name="assembly">The assembly to scan for tool icons.</param>
+    public static void ScanAssembly(Assembly assembly)
     {
-        if (_initialized)
-        {
-            return;
-        }
-
         lock (LockObject)
         {
-            if (_initialized)
-            {
+            if (ScannedAssemblies.Contains(assembly))
                 return;
-            }
+            
+            ScannedAssemblies.Add(assembly);
 
-            foreach (var toolInstance in toolInstances)
+            foreach (var type in assembly.GetTypes())
             {
-                var toolType = toolInstance.GetType();
-                var methods = toolType.GetMethods(BindingFlags.Public | BindingFlags.Instance);
+                // Only scan non-abstract, non-generic class types
+                if (type.IsAbstract || type.IsGenericTypeDefinition || !type.IsClass)
+                    continue;
+
+                var methods = type.GetMethods(BindingFlags.Public | BindingFlags.Instance);
 
                 foreach (var method in methods)
                 {
                     var toolIconAttr = method.GetCustomAttribute<ToolIconAttribute>();
                     if (toolIconAttr == null || string.IsNullOrEmpty(toolIconAttr.Icon))
-                    {
                         continue;
-                    }
 
-                    var pascalCaseName = method.Name;
-                    
-                    if (!string.IsNullOrEmpty(pascalCaseName))
-                    {
-                        ToolIcons[pascalCaseName] = toolIconAttr.Icon;
-                    }
+                    ToolIcons[method.Name] = toolIconAttr.Icon;
                 }
             }
+        }
+    }
 
-            _initialized = true;
+    /// <summary>
+    /// Scans multiple assemblies for tool icons.
+    /// </summary>
+    /// <param name="assemblies">The assemblies to scan.</param>
+    public static void ScanAssemblies(params Assembly[] assemblies)
+    {
+        foreach (var assembly in assemblies)
+            ScanAssembly(assembly);
+    }
+
+    /// <summary>
+    /// Initialize registry by scanning tool class instances for ToolIconAttribute.
+    /// Deprecated: Prefer using ScanAssembly() instead.
+    /// </summary>
+    [Obsolete("Use ScanAssembly() instead. This method is kept for backward compatibility.")]
+    public static void Initialize(params object[] toolInstances)
+    {
+        foreach (var toolInstance in toolInstances)
+        {
+            ScanAssembly(toolInstance.GetType().Assembly);
         }
     }
 
@@ -86,5 +101,17 @@ public static class ToolIconRegistry
     public static IReadOnlyDictionary<string, string> GetAllToolIcons()
     {
         return ToolIcons;
+    }
+
+    /// <summary>
+    /// Resets the registry state. Used for testing purposes.
+    /// </summary>
+    internal static void Reset()
+    {
+        lock (LockObject)
+        {
+            ToolIcons.Clear();
+            ScannedAssemblies.Clear();
+        }
     }
 }

@@ -1,20 +1,23 @@
 using System.ClientModel;
+using System.Reflection;
 using DotBot.Abstractions;
 using DotBot.Agents;
-using DotBot.CLI;
 using DotBot.Configuration;
 using DotBot.Cron;
 using DotBot.DashBoard;
 using DotBot.Heartbeat;
+using DotBot.Hosting;
 using DotBot.Localization;
 using DotBot.Mcp;
 using DotBot.Memory;
+using DotBot.Modules;
 using DotBot.Security;
 using DotBot.Skills;
+using DotBot.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using OpenAI;
 
-namespace DotBot.Hosting;
+namespace DotBot.CLI;
 
 public sealed class CliHost(
     IServiceProvider sp,
@@ -27,7 +30,8 @@ public sealed class CliHost(
     CronService cronService,
     McpClientManager mcpClientManager,
     LanguageService languageService,
-    ConsoleApprovalService cliApprovalService) : IDotBotHost
+    ConsoleApprovalService cliApprovalService,
+    ModuleRegistry moduleRegistry) : IDotBotHost
 {
     public async Task RunAsync(CancellationToken cancellationToken = default)
     {
@@ -36,10 +40,16 @@ public sealed class CliHost(
         var traceStore = sp.GetService<TraceStore>();
         var tokenUsageStore = sp.GetService<TokenUsageStore>();
 
+        // Scan for tool icons at startup
+        ToolProviderCollector.ScanToolIcons(Assembly.GetExecutingAssembly());
+
+        // Collect tool providers from modules
+        var toolProviders = ToolProviderCollector.Collect(moduleRegistry, config);
+
         var agentFactory = new AgentFactory(
             paths.BotPath, paths.WorkspacePath, config,
             memoryStore, skillsLoader, cliApprovalService, blacklist,
-            toolProviders: null,
+            toolProviders: toolProviders,
             toolProviderContext: new ToolProviderContext
             {
                 Config = config,

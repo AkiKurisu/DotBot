@@ -2,8 +2,6 @@
 
 阅读 DotBot 文档快速上手🚀
 
-[架构与安全](./architecture.md) - 架构设计、安全模型
-
 [配置与安全指南](./config_guide.md) - 模型、工具、黑名单、工作区边界、审批、Gateway 多 Channel 并发模式
 
 [API 模式指南](./api_guide.md) - OpenAI 兼容 API 服务、工具过滤、SDK 调用示例

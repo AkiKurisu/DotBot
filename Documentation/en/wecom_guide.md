@@ -556,5 +556,3 @@ Please follow the official WeChat Work documentation for deployment: [WeChat Wor
 - [Enterprise WeChat Smart Robot Interface Documentation](https://developer.work.weixin.qq.com/document/path/100719)
 
 - [DotBot Configuration Guide](./config_guide.md)
-
-- [DotBot Architecture and Security](./architecture.md)

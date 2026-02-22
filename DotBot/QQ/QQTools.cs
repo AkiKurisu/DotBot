@@ -1,9 +1,8 @@
 using System.ComponentModel;
 using System.Text.Json;
 using DotBot.Attributes;
-using DotBot.QQ;
 
-namespace DotBot.Tools;
+namespace DotBot.QQ;
 
 public sealed class QQTools(QQBotClient client)
 {

@@ -1,7 +1,7 @@
 using DotBot.Abstractions;
 using Microsoft.Extensions.AI;
 
-namespace DotBot.Tools.Providers.Channels;
+namespace DotBot.WeCom;
 
 /// <summary>
 /// Provides WeCom (企业微信) channel-specific tools.

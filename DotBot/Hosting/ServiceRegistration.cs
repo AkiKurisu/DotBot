@@ -8,7 +8,6 @@ using DotBot.Modules;
 using DotBot.Security;
 using DotBot.Skills;
 using Microsoft.Extensions.DependencyInjection;
-using Spectre.Console;
 
 namespace DotBot.Hosting;
 

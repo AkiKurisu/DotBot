@@ -1,7 +1,5 @@
 using DotBot.Abstractions;
 using DotBot.Configuration;
-using DotBot.Gateway;
-using DotBot.Hosting;
 using DotBot.WeCom;
 using DotBot.WeCom.Factories;
 using Microsoft.Extensions.DependencyInjection;
@@ -51,19 +49,10 @@ public sealed partial class WeComModule : ModuleBase
     }
 
     /// <inheritdoc />
+    public override IEnumerable<IAgentToolProvider> GetToolProviders()
+        => [new WeComToolProvider()];
+
+    /// <inheritdoc />
     public override IChannelService? CreateChannelService(IServiceProvider sp, ModuleContext context)
         => ActivatorUtilities.CreateInstance<WeComChannelService>(sp);
-}
-
-/// <summary>
-/// Host factory for WeCom mode.
-/// </summary>
-[HostFactory("wecom")]
-public sealed class WeComHostFactory : IHostFactory
-{
-    /// <inheritdoc />
-    public IDotBotHost CreateHost(IServiceProvider serviceProvider, ModuleContext context)
-    {
-        return ActivatorUtilities.CreateInstance<WeComBotHost>(serviceProvider);
-    }
 }

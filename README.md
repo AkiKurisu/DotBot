@@ -68,7 +68,6 @@ dotbot
 
 | Document | Description |
 |----------|-------------|
-| [Architecture & Security](./Documentation/en/architecture.md) | Architecture design, security model |
 | [Configuration Guide](./Documentation/en/config_guide.md) | Tools, security, blacklists, approval, MCP, Gateway |
 | [API Mode Guide](./Documentation/en/api_guide.md) | OpenAI-compatible API, tool filtering, SDK examples |
 | [QQ Bot Guide](./Documentation/en/qq_bot_guide.md) | NapCat / permissions / approval |
