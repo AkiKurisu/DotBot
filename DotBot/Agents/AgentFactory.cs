@@ -1,18 +1,12 @@
 using System.ClientModel;
 using System.Collections.Concurrent;
 using DotBot.Abstractions;
-using DotBot.CLI;
 using DotBot.Configuration;
 using DotBot.Context;
-using DotBot.Cron;
 using DotBot.DashBoard;
-using DotBot.Mcp;
 using DotBot.Memory;
-using DotBot.QQ;
 using DotBot.Security;
 using DotBot.Skills;
-using DotBot.Tools;
-using DotBot.WeCom;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using OpenAI;
@@ -41,12 +35,8 @@ public sealed class AgentFactory
     private readonly ToolProviderContext _toolProviderContext;
     private readonly IReadOnlyList<IAgentToolProvider> _toolProviders;
 
-    // Legacy fields for backward compatibility (WeComTools accessor)
-    private readonly WeComTools? _weComTools;
-
     /// <summary>
     /// Creates a new AgentFactory with tool providers.
-    /// This is the preferred constructor for the new provider-based architecture.
     /// </summary>
     public AgentFactory(
         string cortexBotPath,
@@ -56,7 +46,7 @@ public sealed class AgentFactory
         SkillsLoader skillsLoader,
         IApprovalService approvalService,
         PathBlacklist? blacklist,
-        IEnumerable<IAgentToolProvider>? toolProviders,
+        IEnumerable<IAgentToolProvider> toolProviders,
         ToolProviderContext? toolProviderContext = null,
         TraceCollector? traceCollector = null)
     {
@@ -78,10 +68,6 @@ public sealed class AgentFactory
         if (config.MaxContextTokens > 0)
             Compactor = new ContextCompactor(_chatClient, Consolidator);
 
-        // Initialize WeCom tools for backward compatibility (WeComTools property accessor)
-        if ((config.WeCom.Enabled && !string.IsNullOrWhiteSpace(config.WeCom.WebhookUrl)) || config.WeComBot.Enabled)
-            _weComTools = new WeComTools(config.WeCom.WebhookUrl);
-
         // Build tool provider context
         _toolProviderContext = toolProviderContext ?? new ToolProviderContext
         {
@@ -96,16 +82,8 @@ public sealed class AgentFactory
             TraceCollector = traceCollector
         };
 
-        // Use provided providers or build default set
-        _toolProviders = toolProviders != null
-            ? toolProviders.ToList()
-            : BuildDefaultToolProviders();
+        _toolProviders = toolProviders.ToList();
     }
-
-    /// <summary>
-    /// Gets the WeCom tools instance for direct access (used by Heartbeat service).
-    /// </summary>
-    public WeComTools? WeComTools => _weComTools;
 
     /// <summary>
     /// Gets the last created tools for inspection.
@@ -234,9 +212,6 @@ public sealed class AgentFactory
                 .ToList();
         }
 
-        // Initialize tool icon registry with tool instances for icon mapping
-        InitializeToolIconRegistry();
-
         return tools;
     }
 
@@ -308,66 +283,5 @@ public sealed class AgentFactory
         return config.EnabledTools.Count == 0
             ? []
             : new HashSet<string>(config.EnabledTools, StringComparer.OrdinalIgnoreCase);
-    }
-
-    private static List<IAgentToolProvider> BuildDefaultToolProviders()
-    {
-        // All providers self-check availability in CreateTools()
-        // No need for conditional logic here - providers return empty list when not applicable
-        return
-        [
-            new CoreToolProvider(),
-            new WeComToolProvider(),
-            new QQToolProvider(),
-            new CronToolProvider(),
-            new McpToolProvider()
-        ];
-    }
-
-    private void InitializeToolIconRegistry()
-    {
-        // Build tool instances for icon registry (for backward compatibility)
-        var userDotBotPath = Path.GetFullPath(Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".bot"));
-
-        var subAgentManager = new SubAgentManager(
-            _chatClient,
-            _workspacePath,
-            _config.SubagentMaxToolCallRounds,
-            maxConcurrency: _config.SubagentMaxConcurrency,
-            shellTimeout: _config.Tools.Shell.Timeout,
-            blacklist: _toolProviderContext.PathBlacklist);
-
-        var toolInstances = new List<object>
-        {
-            new AgentTools(subAgentManager),
-            new FileTools(
-                _workspacePath,
-                _config.Tools.File.RequireApprovalOutsideWorkspace,
-                _config.Tools.File.MaxFileSize,
-                _toolProviderContext.ApprovalService,
-                _toolProviderContext.PathBlacklist,
-                trustedReadPaths: [userDotBotPath]),
-            new ShellTools(
-                _workspacePath,
-                _config.Tools.Shell.Timeout,
-                _config.Tools.Shell.RequireApprovalOutsideWorkspace,
-                _config.Tools.Shell.MaxOutputLength,
-                approvalService: _toolProviderContext.ApprovalService,
-                blacklist: _toolProviderContext.PathBlacklist),
-            new WebTools(
-                _config.Tools.Web.MaxChars,
-                _config.Tools.Web.Timeout,
-                _config.Tools.Web.SearchMaxResults,
-                _config.Tools.Web.SearchProvider)
-        };
-
-        if (_weComTools != null)
-            toolInstances.Add(_weComTools);
-
-        if (_toolProviderContext.ChannelClient is QQBotClient qqClient)
-            toolInstances.Add(new QQTools(qqClient));
-
-        ToolIconRegistry.Initialize(toolInstances.ToArray());
     }
 }

@@ -1,6 +1,5 @@
 using DotBot.Abstractions;
 using DotBot.Configuration;
-using DotBot.Gateway;
 using DotBot.Hosting;
 using DotBot.Modules;
 using DotBot.QQ.Factories;
@@ -51,6 +50,10 @@ public sealed partial class QQModule : ModuleBase
             });
         });
     }
+
+    /// <inheritdoc />
+    public override IEnumerable<IAgentToolProvider> GetToolProviders()
+        => [new QQToolProvider()];
 
     /// <inheritdoc />
     public override IChannelService? CreateChannelService(IServiceProvider sp, ModuleContext context)

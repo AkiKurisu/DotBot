@@ -1,4 +1,5 @@
 using System.ClientModel;
+using System.Reflection;
 using DotBot.Abstractions;
 using DotBot.Agents;
 using DotBot.Configuration;
@@ -8,8 +9,10 @@ using DotBot.Heartbeat;
 using DotBot.Hosting;
 using DotBot.Mcp;
 using DotBot.Memory;
+using DotBot.Modules;
 using DotBot.Security;
 using DotBot.Skills;
+using DotBot.Tools;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using OpenAI;
@@ -29,7 +32,8 @@ public sealed class WeComBotHost(
     McpClientManager mcpClientManager,
     WeComBotRegistry registry,
     WeComPermissionService wecomPermissionService,
-    WeComApprovalService wecomApprovalService) : IDotBotHost
+    WeComApprovalService wecomApprovalService,
+    ModuleRegistry moduleRegistry) : IDotBotHost
 {
     public async Task RunAsync(CancellationToken cancellationToken = default)
     {
@@ -38,10 +42,21 @@ public sealed class WeComBotHost(
         var traceStore = sp.GetService<TraceStore>();
         var tokenUsageStore = sp.GetService<TokenUsageStore>();
 
+        // Scan for tool icons at startup
+        ToolProviderCollector.ScanToolIcons(Assembly.GetExecutingAssembly());
+
+        // Collect tool providers from modules
+        var toolProviders = ToolProviderCollector.Collect(moduleRegistry, config);
+
+        // Create WeComTools for notifications (if configured)
+        var weComTools = (config.WeCom.Enabled && !string.IsNullOrWhiteSpace(config.WeCom.WebhookUrl))
+            ? new WeComTools(config.WeCom.WebhookUrl)
+            : null;
+
         var agentFactory = new AgentFactory(
             paths.BotPath, paths.WorkspacePath, config,
             memoryStore, skillsLoader, wecomApprovalService, blacklist,
-            toolProviders: null,
+            toolProviders: toolProviders,
             toolProviderContext: new ToolProviderContext
             {
                 Config = config,
@@ -77,11 +92,11 @@ public sealed class WeComBotHost(
             intervalSeconds: config.Heartbeat.IntervalSeconds,
             enabled: config.Heartbeat.Enabled);
 
-        if (config.Heartbeat.NotifyAdmin && agentFactory.WeComTools != null)
+        if (config.Heartbeat.NotifyAdmin && weComTools != null)
         {
             heartbeatService.OnResult = async result =>
             {
-                try { await agentFactory.WeComTools.SendTextAsync($"[Heartbeat] {result}"); }
+                try { await weComTools.SendTextAsync($"[Heartbeat] {result}"); }
                 catch (Exception ex)
                 {
                     AnsiConsole.MarkupLine(
@@ -98,10 +113,10 @@ public sealed class WeComBotHost(
             {
                 try
                 {
-                    if (job.Payload.Channel == "wecom" && agentFactory.WeComTools != null)
-                        await agentFactory.WeComTools.SendTextAsync(result);
-                    else if (agentFactory.WeComTools != null)
-                        await agentFactory.WeComTools.SendTextAsync($"[Cron: {job.Name}] {result}");
+                    if (job.Payload.Channel == "wecom" && weComTools != null)
+                        await weComTools.SendTextAsync(result);
+                    else if (weComTools != null)
+                        await weComTools.SendTextAsync($"[Cron: {job.Name}] {result}");
                 }
                 catch (Exception ex)
                 {

@@ -1,9 +1,9 @@
 using DotBot.Abstractions;
 using DotBot.Api.Factories;
 using DotBot.Configuration;
-using DotBot.Gateway;
 using DotBot.Hosting;
 using DotBot.Modules;
+using DotBot.Tools;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DotBot.Api;
@@ -43,6 +43,10 @@ public sealed partial class ApiModule : ModuleBase
             });
         });
     }
+
+    /// <inheritdoc />
+    public override IEnumerable<IAgentToolProvider> GetToolProviders()
+        => [new CoreToolProvider()];
 
     /// <inheritdoc />
     public override IChannelService? CreateChannelService(IServiceProvider sp, ModuleContext context)

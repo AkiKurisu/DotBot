@@ -1,4 +1,5 @@
 using System.ClientModel;
+using System.Reflection;
 using DotBot.Abstractions;
 using DotBot.Agents;
 using DotBot.Configuration;
@@ -8,8 +9,11 @@ using DotBot.Heartbeat;
 using DotBot.Hosting;
 using DotBot.Mcp;
 using DotBot.Memory;
+using DotBot.Modules;
 using DotBot.Security;
 using DotBot.Skills;
+using DotBot.Tools;
+using DotBot.WeCom;
 using Microsoft.Extensions.DependencyInjection;
 using OpenAI;
 using Spectre.Console;
@@ -28,7 +32,8 @@ public sealed class QQBotHost(
     McpClientManager mcpClientManager,
     QQBotClient qqClient,
     QQPermissionService permissionService,
-    QQApprovalService qqApprovalService) : IDotBotHost
+    QQApprovalService qqApprovalService,
+    ModuleRegistry moduleRegistry) : IDotBotHost
 {
     public async Task RunAsync(CancellationToken cancellationToken = default)
     {
@@ -37,10 +42,21 @@ public sealed class QQBotHost(
         var traceStore = sp.GetService<TraceStore>();
         var tokenUsageStore = sp.GetService<TokenUsageStore>();
 
+        // Scan for tool icons at startup
+        ToolProviderCollector.ScanToolIcons(Assembly.GetExecutingAssembly());
+
+        // Collect tool providers from modules
+        var toolProviders = ToolProviderCollector.Collect(moduleRegistry, config);
+
+        // Create WeComTools for notifications (if configured)
+        var weComTools = (config.WeCom.Enabled && !string.IsNullOrWhiteSpace(config.WeCom.WebhookUrl))
+            ? new WeComTools(config.WeCom.WebhookUrl)
+            : null;
+
         var agentFactory = new AgentFactory(
             paths.BotPath, paths.WorkspacePath, config,
             memoryStore, skillsLoader, qqApprovalService, blacklist,
-            toolProviders: null,
+            toolProviders: toolProviders,
             toolProviderContext: new ToolProviderContext
             {
                 Config = config,
@@ -90,9 +106,9 @@ public sealed class QQBotHost(
                             $"[grey][[Heartbeat]][/] [red]Failed to notify admin {adminId}: {Markup.Escape(ex.Message)}[/]");
                     }
                 }
-                if (agentFactory.WeComTools != null)
+                if (weComTools != null)
                 {
-                    try { await agentFactory.WeComTools.SendTextAsync($"[Heartbeat] {result}"); }
+                    try { await weComTools.SendTextAsync($"[Heartbeat] {result}"); }
                     catch (Exception ex)
                     {
                         AnsiConsole.MarkupLine(
@@ -110,16 +126,16 @@ public sealed class QQBotHost(
             {
                 try
                 {
-                    if (job.Payload.Channel == "wecom" && agentFactory.WeComTools != null)
-                        await agentFactory.WeComTools.SendTextAsync(result);
+                    if (job.Payload.Channel == "wecom" && weComTools != null)
+                        await weComTools.SendTextAsync(result);
                     else if (job.Payload.Channel != null && long.TryParse(job.Payload.Channel, out var groupId))
                         await qqClient.SendGroupMessageAsync(groupId, result);
                     else if (job.Payload.To != null && long.TryParse(job.Payload.To, out var userId))
                         await qqClient.SendPrivateMessageAsync(userId, result);
                     else if (job.Payload.CreatorId != null)
                     {
-                        if (job.Payload.CreatorSource == "wecom" && agentFactory.WeComTools != null)
-                            await agentFactory.WeComTools.SendTextAsync($"[Cron: {job.Name}] {result}");
+                        if (job.Payload.CreatorSource == "wecom" && weComTools != null)
+                            await weComTools.SendTextAsync($"[Cron: {job.Name}] {result}");
                         else if (long.TryParse(job.Payload.CreatorId, out var creatorId))
                             await qqClient.SendPrivateMessageAsync(creatorId, $"[Cron: {job.Name}] {result}");
                     }

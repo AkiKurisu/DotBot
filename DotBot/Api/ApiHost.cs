@@ -1,5 +1,6 @@
 using System.ClientModel;
 using System.Diagnostics.CodeAnalysis;
+using System.Reflection;
 using System.Text.Json;
 using DotBot.Abstractions;
 using DotBot.Agents;
@@ -12,8 +13,10 @@ using DotBot.Heartbeat;
 using DotBot.Hosting;
 using DotBot.Mcp;
 using DotBot.Memory;
+using DotBot.Modules;
 using DotBot.Security;
 using DotBot.Skills;
+using DotBot.Tools;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Hosting;
 using Microsoft.AspNetCore.Builder;
@@ -37,7 +40,8 @@ public sealed class ApiHost(
     PathBlacklist blacklist,
     CronService cronService,
     McpClientManager mcpClientManager,
-    ApiApprovalService approvalService) : IDotBotHost
+    ApiApprovalService approvalService,
+    ModuleRegistry moduleRegistry) : IDotBotHost
 {
     private AgentFactory _agentFactory = null!;
 
@@ -48,10 +52,16 @@ public sealed class ApiHost(
         var traceStore = sp.GetService<TraceStore>();
         var tokenUsageStore = sp.GetService<TokenUsageStore>();
 
+        // Scan for tool icons at startup
+        ToolProviderCollector.ScanToolIcons(Assembly.GetExecutingAssembly());
+
+        // Collect tool providers from modules
+        var toolProviders = ToolProviderCollector.Collect(moduleRegistry, config);
+
         _agentFactory = new AgentFactory(
             paths.BotPath, paths.WorkspacePath, config,
             memoryStore, skillsLoader, approvalService, blacklist,
-            toolProviders: null,
+            toolProviders: toolProviders,
             toolProviderContext: new ToolProviderContext
             {
                 Config = config,

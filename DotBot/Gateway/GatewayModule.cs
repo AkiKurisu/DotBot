@@ -71,6 +71,7 @@ public sealed class GatewayHostFactory : IHostFactory
             sp.GetRequiredService<Skills.SkillsLoader>(),
             sp.GetRequiredService<Cron.CronService>(),
             channelServices,
-            router);
+            router,
+            registry);
     }
 }

@@ -1,3 +1,4 @@
+using System.Reflection;
 using DotBot.Abstractions;
 using DotBot.Agents;
 using DotBot.Api;
@@ -7,8 +8,10 @@ using DotBot.DashBoard;
 using DotBot.Heartbeat;
 using DotBot.Hosting;
 using DotBot.Memory;
+using DotBot.Modules;
 using DotBot.Security;
 using DotBot.Skills;
+using DotBot.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
 
@@ -29,6 +32,7 @@ public sealed class GatewayHost : IDotBotHost
     private readonly CronService _cronService;
     private readonly IReadOnlyList<IChannelService> _channels;
     private readonly MessageRouter _router;
+    private readonly ModuleRegistry _moduleRegistry;
 
     public GatewayHost(
         IServiceProvider sp,
@@ -38,7 +42,8 @@ public sealed class GatewayHost : IDotBotHost
         SkillsLoader skillsLoader,
         CronService cronService,
         IEnumerable<IChannelService> channels,
-        MessageRouter router)
+        MessageRouter router,
+        ModuleRegistry moduleRegistry)
     {
         _sp = sp;
         _config = config;
@@ -48,6 +53,7 @@ public sealed class GatewayHost : IDotBotHost
         _cronService = cronService;
         _channels = channels.ToList();
         _router = router;
+        _moduleRegistry = moduleRegistry;
 
         foreach (var ch in _channels)
             _router.RegisterChannel(ch);
@@ -55,6 +61,9 @@ public sealed class GatewayHost : IDotBotHost
 
     public async Task RunAsync(CancellationToken cancellationToken = default)
     {
+        // Scan for tool icons at startup
+        ToolProviderCollector.ScanToolIcons(Assembly.GetExecutingAssembly());
+
         var traceStore = _sp.GetService<TraceStore>();
         var tokenUsageStore = _sp.GetService<TokenUsageStore>();
 
@@ -174,10 +183,13 @@ public sealed class GatewayHost : IDotBotHost
         // Use a console approval service for background (heartbeat/cron) tasks
         var approvalService = new DotBot.Security.ConsoleApprovalService();
 
+        // Collect tool providers from modules
+        var toolProviders = ToolProviderCollector.Collect(_moduleRegistry, _config);
+
         var agentFactory = new AgentFactory(
             _paths.BotPath, _paths.WorkspacePath, _config,
             memoryStore, _skillsLoader, approvalService, pathBlacklist,
-            toolProviders: null,
+            toolProviders: toolProviders,
             toolProviderContext: new ToolProviderContext
             {
                 Config = _config,

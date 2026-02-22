@@ -29,4 +29,7 @@ public abstract class ModuleBase : IDotBotModule
 
     /// <inheritdoc />
     public virtual IChannelService? CreateChannelService(IServiceProvider sp, ModuleContext context) => null;
+
+    /// <inheritdoc />
+    public virtual IEnumerable<IAgentToolProvider> GetToolProviders() => [];
 }

@@ -50,4 +50,11 @@ public interface IDotBotModule
     /// <param name="context">The module context containing configuration and paths.</param>
     /// <returns>A channel service instance, or null if not supported.</returns>
     IChannelService? CreateChannelService(IServiceProvider sp, ModuleContext context) => null;
+
+    /// <summary>
+    /// Gets the tool providers contributed by this module.
+    /// Tool providers are used to register AI tools specific to this module's functionality.
+    /// </summary>
+    /// <returns>An enumerable of tool providers, or empty if the module provides no tools.</returns>
+    IEnumerable<IAgentToolProvider> GetToolProviders() => [];
 }

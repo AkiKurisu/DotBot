@@ -7,8 +7,10 @@ using DotBot.DashBoard;
 using DotBot.Hosting;
 using DotBot.Mcp;
 using DotBot.Memory;
+using DotBot.Modules;
 using DotBot.Security;
 using DotBot.Skills;
+using DotBot.Tools;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using OpenAI;
@@ -33,6 +35,7 @@ public sealed class WeComChannelService : IChannelService
     private readonly WeComBotRegistry _registry;
     private readonly WeComPermissionService _permissionService;
     private readonly WeComApprovalService _wecomApprovalService;
+    private readonly ModuleRegistry _moduleRegistry;
 
     private WebApplication? _webApp;
     private WeComChannelAdapter? _adapter;
@@ -50,7 +53,8 @@ public sealed class WeComChannelService : IChannelService
         McpClientManager mcpClientManager,
         WeComBotRegistry registry,
         WeComPermissionService permissionService,
-        WeComApprovalService wecomApprovalService)
+        WeComApprovalService wecomApprovalService,
+        ModuleRegistry moduleRegistry)
     {
         _sp = sp;
         _config = config;
@@ -63,6 +67,7 @@ public sealed class WeComChannelService : IChannelService
         _registry = registry;
         _permissionService = permissionService;
         _wecomApprovalService = wecomApprovalService;
+        _moduleRegistry = moduleRegistry;
     }
 
     private AgentFactory BuildAgentFactory()
@@ -70,10 +75,13 @@ public sealed class WeComChannelService : IChannelService
         var cronTools = _sp.GetService<CronTools>();
         var traceCollector = _sp.GetService<TraceCollector>();
 
+        // Collect tool providers from modules
+        var toolProviders = ToolProviderCollector.Collect(_moduleRegistry, _config);
+
         return new AgentFactory(
             _paths.BotPath, _paths.WorkspacePath, _config,
             _memoryStore, _skillsLoader, _wecomApprovalService, _blacklist,
-            toolProviders: null,
+            toolProviders: toolProviders,
             toolProviderContext: new ToolProviderContext
             {
                 Config = _config,

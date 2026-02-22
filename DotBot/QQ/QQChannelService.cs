@@ -7,8 +7,10 @@ using DotBot.DashBoard;
 using DotBot.Hosting;
 using DotBot.Mcp;
 using DotBot.Memory;
+using DotBot.Modules;
 using DotBot.Security;
 using DotBot.Skills;
+using DotBot.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using OpenAI;
 using Spectre.Console;
@@ -32,6 +34,7 @@ public sealed class QQChannelService : IChannelService
     private readonly QQBotClient _qqClient;
     private readonly QQPermissionService _permissionService;
     private readonly QQApprovalService _qqApprovalService;
+    private readonly ModuleRegistry _moduleRegistry;
 
     private QQChannelAdapter? _adapter;
 
@@ -48,7 +51,8 @@ public sealed class QQChannelService : IChannelService
         McpClientManager mcpClientManager,
         QQBotClient qqClient,
         QQPermissionService permissionService,
-        QQApprovalService qqApprovalService)
+        QQApprovalService qqApprovalService,
+        ModuleRegistry moduleRegistry)
     {
         _sp = sp;
         _config = config;
@@ -61,6 +65,7 @@ public sealed class QQChannelService : IChannelService
         _qqClient = qqClient;
         _permissionService = permissionService;
         _qqApprovalService = qqApprovalService;
+        _moduleRegistry = moduleRegistry;
     }
 
     private AgentFactory BuildAgentFactory()
@@ -68,10 +73,13 @@ public sealed class QQChannelService : IChannelService
         var cronTools = _sp.GetService<CronTools>();
         var traceCollector = _sp.GetService<TraceCollector>();
 
+        // Collect tool providers from modules
+        var toolProviders = ToolProviderCollector.Collect(_moduleRegistry, _config);
+
         return new AgentFactory(
             _paths.BotPath, _paths.WorkspacePath, _config,
             _memoryStore, _skillsLoader, _qqApprovalService, _blacklist,
-            toolProviders: null,
+            toolProviders: toolProviders,
             toolProviderContext: new ToolProviderContext
             {
                 Config = _config,

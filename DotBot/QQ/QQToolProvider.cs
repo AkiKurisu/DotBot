@@ -1,5 +1,4 @@
 using DotBot.Abstractions;
-using DotBot.Tools;
 using Microsoft.Extensions.AI;
 
 namespace DotBot.QQ;

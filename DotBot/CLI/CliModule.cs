@@ -4,6 +4,7 @@ using DotBot.Configuration;
 using DotBot.Hosting;
 using DotBot.Modules;
 using DotBot.Security;
+using DotBot.Tools;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DotBot.CLI;
@@ -42,6 +43,10 @@ public sealed partial class CliModule : ModuleBase
             });
         });
     }
+
+    /// <inheritdoc />
+    public override IEnumerable<IAgentToolProvider> GetToolProviders()
+        => [new CoreToolProvider()];
 }
 
 /// <summary>
