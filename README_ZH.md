@@ -49,20 +49,56 @@
 
 ## 🚀 快速开始
 
+### 环境要求
+
+- [.NET 10 SDK](https://dotnet.microsoft.com/download)（仅构建时需要）
+- 支持的 LLM API Key（OpenAI 兼容格式）
+
+### 构建与安装
+
 ```bash
 # 构建 Release 包
 build.bat
 
-# 配置路径到环境变量
+# 配置路径到环境变量（可选）
 cd Release/DotBot
-bash install_to_path.ps1
+powershell -File install_to_path.ps1
+```
 
+### 配置
+
+DotBot 使用两级配置：**全局配置**（`~/.bot/appsettings.json`）和**工作区配置**（`<workspace>/.bot/appsettings.json`）。
+
+首次使用，创建全局配置文件：
+
+```json
+{
+    "ApiKey": "sk-your-api-key",
+    "Model": "gpt-4o-mini",
+    "EndPoint": "https://api.openai.com/v1"
+}
+```
+
+> 💡 将 API Key 放在全局配置可避免泄露到工作区 Git 仓库。
+
+### 启动
+
+```bash
 # 进入工作区
 cd Workspace
 
-# 启动 DotBot
+# 启动 DotBot（CLI 模式）
 dotbot
 ```
+
+### 运行模式
+
+| 模式 | 启用条件 | 用途 |
+|------|----------|------|
+| CLI 模式 | 默认 | 本地 REPL 交互 |
+| API 模式 | `Api.Enabled = true` | OpenAI 兼容 HTTP 服务 |
+| QQ 机器人 | `QQBot.Enabled = true` | OneBot V11 协议机器人 |
+| 企业微信 | `WeComBot.Enabled = true` | 企业微信机器人 |
 
 ## 📚 文档导航
 

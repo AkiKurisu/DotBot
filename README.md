@@ -49,20 +49,56 @@
 
 ## 🚀 Quick Start
 
+### Prerequisites
+
+- [.NET 10 SDK](https://dotnet.microsoft.com/download) (only required for building)
+- Supported LLM API Key (OpenAI-compatible format)
+
+### Build & Install
+
 ```bash
 # Build the Release package
 build.bat
 
-# Configure the path to environment variables
+# Configure the path to environment variables (optional)
 cd Release/DotBot
-bash install_to_path.ps1
+powershell -File install_to_path.ps1
+```
 
+### Configuration
+
+DotBot uses a two-level configuration: **Global config** (`~/.bot/appsettings.json`) and **Workspace config** (`<workspace>/.bot/appsettings.json`).
+
+For first-time use, create the global config file:
+
+```json
+{
+    "ApiKey": "sk-your-api-key",
+    "Model": "gpt-4o-mini",
+    "EndPoint": "https://api.openai.com/v1"
+}
+```
+
+> 💡 Storing API Key in global config prevents it from leaking into workspace Git repositories.
+
+### Launch
+
+```bash
 # Enter the workspace
 cd Workspace
 
-# Start DotBot
+# Start DotBot (CLI mode)
 dotbot
 ```
+
+### Runtime Modes
+
+| Mode | Enable Condition | Usage |
+|------|------------------|-------|
+| CLI Mode | Default | Local REPL interaction |
+| API Mode | `Api.Enabled = true` | OpenAI-compatible HTTP service |
+| QQ Bot | `QQBot.Enabled = true` | OneBot V11 protocol bot |
+| WeCom Bot | `WeComBot.Enabled = true` | WeChat Work bot |
 
 ## 📚 Documentation
 

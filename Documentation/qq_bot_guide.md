@@ -2,17 +2,6 @@
 
 本文档介绍如何配置 DotBot 接入 QQ 机器人，使其能够在 QQ 群聊和私聊中作为智能助手回答问题。
 
-## 架构概览
-
-```
-QQ 用户 ──── QQ 服务器 ──── NapCat (QQ客户端) ──── DotBot (WebSocket服务器)
-                                                    ↑ OneBot V11 协议
-```
-
-- **NapCat**：基于 NTQQ 的第三方 QQ 协议框架，负责登录 QQ 账号并收发消息
-- **DotBot**：启动一个 WebSocket 服务器，NapCat 通过**反向 WebSocket** 连接到 DotBot
-- 通信协议为 **OneBot V11**（JSON 格式消息）
-
 ## 前置准备
 
 | 需求 | 说明 |

@@ -2,17 +2,6 @@
 
 This document describes how to configure DotBot to connect to a QQ bot, enabling it to serve as an intelligent assistant in QQ group chats and private messages.
 
-## Architecture Overview
-
-```
-QQ User ──── QQ Server ──── NapCat (QQ Client) ──── DotBot (WebSocket Server)
-                                                    ↑ OneBot V11 Protocol
-```
-
-- **NapCat**: A third-party QQ protocol framework based on NTQQ, responsible for logging into a QQ account and sending/receiving messages
-- **DotBot**: Starts a WebSocket server; NapCat connects to DotBot via **reverse WebSocket**
-- Communication protocol is **OneBot V11** (JSON format messages)
-
 ## Prerequisites
 
 | Requirement | Description |
