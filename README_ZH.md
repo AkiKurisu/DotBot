@@ -68,7 +68,6 @@ dotbot
 
 | 文档 | 说明 |
 |------|------|
-| [架构与安全](./Documentation/architecture.md) | 架构设计、安全模型 |
 | [配置指南](./Documentation/config_guide.md) | 工具、安全、黑名单、审批、MCP、Gateway |
 | [API 模式指南](./Documentation/api_guide.md) | OpenAI 兼容 API、工具过滤、SDK 示例 |
 | [QQ 机器人指南](./Documentation/qq_bot_guide.md) | NapCat/权限/审批 |

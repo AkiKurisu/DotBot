@@ -637,7 +637,6 @@ API 模式下的会话由框架自动管理。可以通过辅助端点 `GET /v1/
 
 ## 相关文档
 
-- [架构与安全](./architecture.md) - 架构设计、安全模型
 - [配置指南](./config_guide.md) - 完整配置项说明
 - [QQ 机器人指南](./qq_bot_guide.md) - QQ 机器人模式
 - [企业微信指南](./wecom_guide.md) - 企业微信机器人模式

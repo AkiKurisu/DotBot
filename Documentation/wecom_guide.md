@@ -618,4 +618,3 @@ await pusher.PushFileAsync(fileMediaId);
 - [企业微信群机器人配置说明](https://developer.work.weixin.qq.com/document/path/99110)
 - [企业微信智能机器人接口文档](https://developer.work.weixin.qq.com/document/path/100719)
 - [DotBot 配置指南](./config_guide.md)
-- [DotBot 架构与安全](./architecture.md)

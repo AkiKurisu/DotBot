@@ -2,8 +2,6 @@
 
 Read the DotBot documentation to get started quickly
 
-[Architecture & Security](./architecture.md) - Architecture design, security model
-
 [Configuration & Security Guide](./config_guide.md) - Model, tools, blacklists, workspace boundaries, approval, Gateway multi-channel concurrent mode
 
 [API Mode Guide](./api_guide.md) - OpenAI-compatible API service, tool filtering, SDK examples

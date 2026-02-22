@@ -313,7 +313,6 @@ Access DashBoard at `http://localhost:8080/dashboard` (integrated into API serve
 
 ## Related Documentation
 
-- [Architecture & Security](./architecture.md) - Architecture design, security model
 - [Configuration Guide](./config_guide.md) - Complete configuration reference
 - [API Mode Guide](./api_guide.md) - OpenAI-compatible API service
 - [QQ Bot Guide](./qq_bot_guide.md) - QQ Bot mode
