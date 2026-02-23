@@ -5,13 +5,13 @@ using DotBot.Security;
 namespace DotBot.Abstractions;
 
 /// <summary>
-/// Represents a channel service that handles communication for a specific platform
-/// (e.g., QQ, WeCom, API). Used by GatewayHost to run multiple channels concurrently.
+/// Represents a channel service that handles communication for a specific platform.
+/// Used by GatewayHost to run multiple channels concurrently.
 /// </summary>
 public interface IChannelService : IAsyncDisposable
 {
     /// <summary>
-    /// Gets the unique name of this channel (e.g., "qq", "wecom", "api").
+    /// Gets the unique name of this channel.
     /// </summary>
     string Name { get; }
 
@@ -34,7 +34,7 @@ public interface IChannelService : IAsyncDisposable
     IApprovalService? ApprovalService { get; }
 
     /// <summary>
-    /// The underlying channel client, if any (e.g. QQBotClient).
+    /// The underlying channel client, if any.
     /// Used by GatewayHost to pass channel-specific tools (voice, file) to the shared agent runner.
     /// </summary>
     object? ChannelClient { get; }

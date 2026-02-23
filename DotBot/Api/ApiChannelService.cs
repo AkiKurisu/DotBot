@@ -58,9 +58,7 @@ public sealed class ApiChannelService : IChannelService
     public CronService? CronService { get; set; }
 
     /// <inheritdoc />
-    public IApprovalService? ApprovalService => _autoApproveService;
-
-    private static readonly IApprovalService _autoApproveService = new AutoApproveApprovalService();
+    public IApprovalService ApprovalService { get; } = new AutoApproveApprovalService();
 
     /// <inheritdoc />
     public object? ChannelClient => null;
