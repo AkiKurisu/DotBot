@@ -207,9 +207,9 @@ public sealed class AppConfig
         public int SearchMaxResults { get; set; } = 5;
 
         /// <summary>
-        /// Search provider: "Bing" (default, globally accessible), "Exa" (AI-optimized, free via MCP), or "DuckDuckGo" (may be blocked by CAPTCHA).
+        /// Search provider: "Bing" (globally accessible), "Exa" (AI-optimized, free via MCP), or "DuckDuckGo" (may be blocked by CAPTCHA).
         /// </summary>
-        public string SearchProvider { get; set; } = "Bing";
+        public string SearchProvider { get; set; } = WebSearchProvider.Exa;
     }
 
     public sealed class QQBotConfig

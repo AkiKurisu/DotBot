@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using DotBot.Attributes;
+using DotBot.Configuration;
 
 namespace DotBot.Tools;
 
@@ -34,15 +35,14 @@ public sealed class WebTools
         int maxChars = 50000,
         int timeoutSeconds = 30,
         int searchMaxResults = 5,
-        string searchProvider = "Bing",
-        HttpClient? httpClient = null)
+        string searchProvider = WebSearchProvider.Exa)
     {
         _maxChars = maxChars;
         _timeoutSeconds = timeoutSeconds;
         _searchMaxResults = searchMaxResults;
         _searchProvider = searchProvider;
         
-        _httpClient = httpClient ?? new HttpClient();
+        _httpClient = new HttpClient();
         _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
         _httpClient.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
     }
@@ -68,17 +68,22 @@ public sealed class WebTools
         {
             List<SearchResult> results;
 
-            if (_searchProvider.Equals("Exa", StringComparison.OrdinalIgnoreCase))
+            if (_searchProvider.Equals(WebSearchProvider.Exa, StringComparison.OrdinalIgnoreCase))
             {
                 return await SearchExa(query, count);
             }
-            else if (_searchProvider.Equals("DuckDuckGo", StringComparison.OrdinalIgnoreCase))
+
+            if (_searchProvider.Equals(WebSearchProvider.DuckDuckGo, StringComparison.OrdinalIgnoreCase))
             {
                 results = await SearchDuckDuckGo(query, count);
             }
-            else
+            else if (_searchProvider.Equals(WebSearchProvider.Bing, StringComparison.OrdinalIgnoreCase))
             {
                 results = await SearchBing(query, count);
+            }
+            else
+            {
+                throw new ArgumentException(nameof(_searchProvider));
             }
 
             if (results.Count == 0)
