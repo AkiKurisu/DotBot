@@ -52,6 +52,9 @@ public sealed class WeComChannelService : IChannelService
     /// <inheritdoc />
     public IApprovalService? ApprovalService => _wecomApprovalService;
 
+    /// <inheritdoc />
+    public object? ChannelClient => null;
+
     public WeComChannelService(
         IServiceProvider sp,
         AppConfig config,

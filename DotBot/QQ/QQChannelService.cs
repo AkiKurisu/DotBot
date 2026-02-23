@@ -50,6 +50,9 @@ public sealed class QQChannelService : IChannelService
     /// <inheritdoc />
     public IApprovalService? ApprovalService => _qqApprovalService;
 
+    /// <inheritdoc />
+    public object? ChannelClient => _qqClient;
+
     public QQChannelService(
         IServiceProvider sp,
         AppConfig config,

@@ -62,6 +62,9 @@ public sealed class ApiChannelService : IChannelService
 
     private static readonly IApprovalService _autoApproveService = new AutoApproveApprovalService();
 
+    /// <inheritdoc />
+    public object? ChannelClient => null;
+
     /// <summary>
     /// Optional callback invoked by GatewayHost to inject additional routes (e.g. dashboard)
     /// onto this channel's WebApplication before it starts listening.

@@ -43,7 +43,7 @@ public sealed partial class CliModule : ModuleBase
 
     /// <inheritdoc />
     public override IEnumerable<IAgentToolProvider> GetToolProviders()
-        => [new CoreToolProvider()];
+        => [];
 }
 
 /// <summary>

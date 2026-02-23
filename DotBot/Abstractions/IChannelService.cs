@@ -34,6 +34,12 @@ public interface IChannelService : IAsyncDisposable
     IApprovalService? ApprovalService { get; }
 
     /// <summary>
+    /// The underlying channel client, if any (e.g. QQBotClient).
+    /// Used by GatewayHost to pass channel-specific tools (voice, file) to the shared agent runner.
+    /// </summary>
+    object? ChannelClient { get; }
+
+    /// <summary>
     /// Starts the channel service. This is a long-running task that completes
     /// only when the channel is stopped or the cancellation token is triggered.
     /// </summary>

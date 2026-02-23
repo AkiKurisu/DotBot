@@ -218,6 +218,9 @@ public sealed class GatewayHost : IDotBotHost
         // Collect tool providers from modules
         var toolProviders = ToolProviderCollector.Collect(_moduleRegistry, _config);
 
+        // Prefer the QQ channel client so channel-specific tools (voice, file) are available in cron/heartbeat
+        var channelClient = _channels.FirstOrDefault(ch => ch.ChannelClient != null)?.ChannelClient;
+
         var agentFactory = new AgentFactory(
             _paths.BotPath, _paths.WorkspacePath, _config,
             memoryStore, _skillsLoader, approvalService, pathBlacklist,
@@ -237,7 +240,8 @@ public sealed class GatewayHost : IDotBotHost
                 PathBlacklist = pathBlacklist,
                 CronTools = cronTools,
                 McpClientManager = mcpClientManager.Tools.Count > 0 ? mcpClientManager : null,
-                TraceCollector = traceCollector
+                TraceCollector = traceCollector,
+                ChannelClient = channelClient
             },
             traceCollector: traceCollector);
 
