@@ -4,7 +4,8 @@ public enum ApprovalSource
 {
     Console,
     QQ,
-    WeCom
+    WeCom,
+    Api
 }
 
 public sealed class ApprovalContext

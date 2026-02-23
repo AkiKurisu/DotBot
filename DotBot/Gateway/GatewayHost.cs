@@ -203,7 +203,13 @@ public sealed class GatewayHost : IDotBotHost
         var channelServiceMap = _channels
             .Where(ch => ch.ApprovalService != null)
             .ToDictionary(
-                ch => ch.Name == "qq" ? ApprovalSource.QQ : ApprovalSource.WeCom,
+                ch => ch.Name switch
+                {
+                    "qq"    => ApprovalSource.QQ,
+                    "wecom" => ApprovalSource.WeCom,
+                    "api"   => ApprovalSource.Api,
+                    _       => ApprovalSource.Console
+                },
                 ch => ch.ApprovalService!);
         var approvalService = new DotBot.Security.ChannelRoutingApprovalService(
             channelServiceMap,
@@ -288,6 +294,7 @@ public sealed class GatewayHost : IDotBotHost
         {
             "qq"    => ApprovalSource.QQ,
             "wecom" => ApprovalSource.WeCom,
+            "api"   => ApprovalSource.Api,
             _       => ApprovalSource.Console
         };
         var groupId = source == ApprovalSource.QQ

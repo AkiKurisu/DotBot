@@ -89,6 +89,10 @@ public sealed class CronTools(CronService cronService)
                         payload.CreatorId = wecomContext.UserId;
                         payload.CreatorSource = "wecom";
                     }
+                    else
+                    {
+                        payload.CreatorSource = "api";
+                    }
                 }
 
                 var job = cronService.AddJob(name ?? message[..Math.Min(message.Length, 30)], schedule, payload, deleteAfterRun: delaySeconds.HasValue);
