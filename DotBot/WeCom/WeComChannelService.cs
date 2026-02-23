@@ -23,21 +23,21 @@ namespace DotBot.WeCom;
 /// Gateway channel service for WeCom Bot. Manages the ASP.NET Core HTTP server,
 /// channel adapter, and agent lifecycle as part of a multi-channel gateway.
 /// </summary>
-public sealed class WeComChannelService : IChannelService
+public sealed class WeComChannelService(
+    IServiceProvider sp,
+    AppConfig config,
+    DotBotPaths paths,
+    SessionStore sessionStore,
+    MemoryStore memoryStore,
+    SkillsLoader skillsLoader,
+    PathBlacklist blacklist,
+    McpClientManager mcpClientManager,
+    WeComBotRegistry registry,
+    WeComPermissionService permissionService,
+    WeComApprovalService wecomApprovalService,
+    ModuleRegistry moduleRegistry)
+    : IChannelService
 {
-    private readonly IServiceProvider _sp;
-    private readonly AppConfig _config;
-    private readonly DotBotPaths _paths;
-    private readonly SessionStore _sessionStore;
-    private readonly MemoryStore _memoryStore;
-    private readonly SkillsLoader _skillsLoader;
-    private readonly PathBlacklist _blacklist;
-    private readonly McpClientManager _mcpClientManager;
-    private readonly WeComBotRegistry _registry;
-    private readonly WeComPermissionService _permissionService;
-    private readonly WeComApprovalService _wecomApprovalService;
-    private readonly ModuleRegistry _moduleRegistry;
-
     private WebApplication? _webApp;
     private WeComChannelAdapter? _adapter;
 
@@ -49,61 +49,39 @@ public sealed class WeComChannelService : IChannelService
     /// <inheritdoc />
     public CronService? CronService { get; set; }
 
-    public WeComChannelService(
-        IServiceProvider sp,
-        AppConfig config,
-        DotBotPaths paths,
-        SessionStore sessionStore,
-        MemoryStore memoryStore,
-        SkillsLoader skillsLoader,
-        PathBlacklist blacklist,
-        McpClientManager mcpClientManager,
-        WeComBotRegistry registry,
-        WeComPermissionService permissionService,
-        WeComApprovalService wecomApprovalService,
-        ModuleRegistry moduleRegistry)
-    {
-        _sp = sp;
-        _config = config;
-        _paths = paths;
-        _sessionStore = sessionStore;
-        _memoryStore = memoryStore;
-        _skillsLoader = skillsLoader;
-        _blacklist = blacklist;
-        _mcpClientManager = mcpClientManager;
-        _registry = registry;
-        _permissionService = permissionService;
-        _wecomApprovalService = wecomApprovalService;
-        _moduleRegistry = moduleRegistry;
-    }
+    /// <inheritdoc />
+    public IApprovalService ApprovalService => wecomApprovalService;
+
+    /// <inheritdoc />
+    public object? ChannelClient => null;
 
     private AgentFactory BuildAgentFactory()
     {
-        var cronTools = _sp.GetService<CronTools>();
-        var traceCollector = _sp.GetService<TraceCollector>();
+        var cronTools = sp.GetService<CronTools>();
+        var traceCollector = sp.GetService<TraceCollector>();
 
         // Collect tool providers from modules
-        var toolProviders = ToolProviderCollector.Collect(_moduleRegistry, _config);
+        var toolProviders = ToolProviderCollector.Collect(moduleRegistry, config);
 
         return new AgentFactory(
-            _paths.BotPath, _paths.WorkspacePath, _config,
-            _memoryStore, _skillsLoader, _wecomApprovalService, _blacklist,
+            paths.BotPath, paths.WorkspacePath, config,
+            memoryStore, skillsLoader, wecomApprovalService, blacklist,
             toolProviders: toolProviders,
             toolProviderContext: new ToolProviderContext
             {
-                Config = _config,
+                Config = config,
                 ChatClient = new OpenAIClient(
-                    new ApiKeyCredential(_config.ApiKey),
-                    new OpenAIClientOptions { Endpoint = new Uri(_config.EndPoint) })
-                    .GetChatClient(_config.Model),
-                WorkspacePath = _paths.WorkspacePath,
-                BotPath = _paths.BotPath,
-                MemoryStore = _memoryStore,
-                SkillsLoader = _skillsLoader,
-                ApprovalService = _wecomApprovalService,
-                PathBlacklist = _blacklist,
+                    new ApiKeyCredential(config.ApiKey),
+                    new OpenAIClientOptions { Endpoint = new Uri(config.EndPoint) })
+                    .GetChatClient(config.Model),
+                WorkspacePath = paths.WorkspacePath,
+                BotPath = paths.BotPath,
+                MemoryStore = memoryStore,
+                SkillsLoader = skillsLoader,
+                ApprovalService = wecomApprovalService,
+                PathBlacklist = blacklist,
                 CronTools = cronTools,
-                McpClientManager = _mcpClientManager.Tools.Count > 0 ? _mcpClientManager : null,
+                McpClientManager = mcpClientManager.Tools.Count > 0 ? mcpClientManager : null,
                 TraceCollector = traceCollector
             },
             traceCollector: traceCollector);
@@ -113,12 +91,12 @@ public sealed class WeComChannelService : IChannelService
     {
         var agentFactory = BuildAgentFactory();
         var agent = agentFactory.CreateDefaultAgent();
-        var traceCollector = _sp.GetService<TraceCollector>();
-        var tokenUsageStore = _sp.GetService<TokenUsageStore>();
+        var traceCollector = sp.GetService<TraceCollector>();
+        var tokenUsageStore = sp.GetService<TokenUsageStore>();
 
         _adapter = new WeComChannelAdapter(
-            agent, _sessionStore, _registry,
-            _permissionService, _wecomApprovalService,
+            agent, sessionStore, registry,
+            permissionService, wecomApprovalService,
             heartbeatService: HeartbeatService,
             cronService: CronService,
             agentFactory: agentFactory,
@@ -129,12 +107,12 @@ public sealed class WeComChannelService : IChannelService
         _webApp = builder.Build();
 
         var logger = new WeComServerLogger();
-        var server = new WeComBotServer(_registry, logger: logger);
+        var server = new WeComBotServer(registry, logger: logger);
         server.MapRoutes(_webApp);
 
-        var url = $"https://{_config.WeComBot.Host}:{_config.WeComBot.Port}";
+        var url = $"https://{config.WeComBot.Host}:{config.WeComBot.Port}";
         AnsiConsole.MarkupLine($"[green][[Gateway]][/] WeCom Bot listening on {Markup.Escape(url)}");
-        foreach (var path in _registry.GetAllPaths())
+        foreach (var path in registry.GetAllPaths())
         {
             AnsiConsole.MarkupLine($"[grey]  - {Markup.Escape(url + path)}[/]");
         }
@@ -158,9 +136,9 @@ public sealed class WeComChannelService : IChannelService
     public Task DeliverMessageAsync(string target, string content)
     {
         // WeCom delivery uses the outgoing webhook URL (no per-target routing in bot webhook mode)
-        if (!string.IsNullOrWhiteSpace(_config.WeCom.WebhookUrl))
+        if (!string.IsNullOrWhiteSpace(config.WeCom.WebhookUrl))
         {
-            var wecomTools = new WeComTools(_config.WeCom.WebhookUrl);
+            var wecomTools = new WeComTools(config.WeCom.WebhookUrl);
             return wecomTools.SendTextAsync(content);
         }
         return Task.CompletedTask;

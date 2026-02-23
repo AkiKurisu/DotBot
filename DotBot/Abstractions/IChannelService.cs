@@ -1,16 +1,17 @@
 using DotBot.Cron;
 using DotBot.Heartbeat;
+using DotBot.Security;
 
 namespace DotBot.Abstractions;
 
 /// <summary>
-/// Represents a channel service that handles communication for a specific platform
-/// (e.g., QQ, WeCom, API). Used by GatewayHost to run multiple channels concurrently.
+/// Represents a channel service that handles communication for a specific platform.
+/// Used by GatewayHost to run multiple channels concurrently.
 /// </summary>
 public interface IChannelService : IAsyncDisposable
 {
     /// <summary>
-    /// Gets the unique name of this channel (e.g., "qq", "wecom", "api").
+    /// Gets the unique name of this channel.
     /// </summary>
     string Name { get; }
 
@@ -25,6 +26,18 @@ public interface IChannelService : IAsyncDisposable
     /// Allows slash commands (/cron) to operate within this channel.
     /// </summary>
     CronService? CronService { get; set; }
+
+    /// <summary>
+    /// The channel-specific approval service, if any.
+    /// Used by GatewayHost to route background-task approvals back to the originating channel.
+    /// </summary>
+    IApprovalService? ApprovalService { get; }
+
+    /// <summary>
+    /// The underlying channel client, if any.
+    /// Used by GatewayHost to pass channel-specific tools (voice, file) to the shared agent runner.
+    /// </summary>
+    object? ChannelClient { get; }
 
     /// <summary>
     /// Starts the channel service. This is a long-running task that completes

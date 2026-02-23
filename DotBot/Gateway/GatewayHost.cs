@@ -112,7 +112,19 @@ public sealed class GatewayHost : IDotBotHost
         _cronService.OnJob = async job =>
         {
             var sessionKey = $"cron:{job.Id}";
-            var result = await sharedAgentRunner(job.Payload.Message, sessionKey);
+            var approvalContext = BuildApprovalContext(job.Payload);
+
+            string? result;
+            if (approvalContext != null)
+            {
+                using var _ = ApprovalContextScope.Set(approvalContext);
+                result = await sharedAgentRunner(job.Payload.Message, sessionKey);
+            }
+            else
+            {
+                result = await sharedAgentRunner(job.Payload.Message, sessionKey);
+            }
+
             if (job.Payload.Deliver && result != null)
             {
                 var channel = job.Payload.Channel ?? "wecom";
@@ -186,11 +198,28 @@ public sealed class GatewayHost : IDotBotHost
         var cronTools = _sp.GetService<CronTools>();
         var traceCollector = _sp.GetService<TraceCollector>();
 
-        // Use a console approval service for background (heartbeat/cron) tasks
-        var approvalService = new DotBot.Security.ConsoleApprovalService();
+        // Build a routing approval service that delegates to the originating channel's
+        // approval service based on ApprovalContext.Source, with Console as fallback.
+        var channelServiceMap = _channels
+            .Where(ch => ch.ApprovalService != null)
+            .ToDictionary(
+                ch => ch.Name switch
+                {
+                    "qq"    => ApprovalSource.QQ,
+                    "wecom" => ApprovalSource.WeCom,
+                    "api"   => ApprovalSource.Api,
+                    _       => ApprovalSource.Console
+                },
+                ch => ch.ApprovalService!);
+        var approvalService = new DotBot.Security.ChannelRoutingApprovalService(
+            channelServiceMap,
+            fallback: new DotBot.Security.ConsoleApprovalService());
 
         // Collect tool providers from modules
         var toolProviders = ToolProviderCollector.Collect(_moduleRegistry, _config);
+
+        // Prefer the QQ channel client so channel-specific tools (voice, file) are available in cron/heartbeat
+        var channelClient = _channels.FirstOrDefault(ch => ch.ChannelClient != null)?.ChannelClient;
 
         var agentFactory = new AgentFactory(
             _paths.BotPath, _paths.WorkspacePath, _config,
@@ -211,7 +240,8 @@ public sealed class GatewayHost : IDotBotHost
                 PathBlacklist = pathBlacklist,
                 CronTools = cronTools,
                 McpClientManager = mcpClientManager.Tools.Count > 0 ? mcpClientManager : null,
-                TraceCollector = traceCollector
+                TraceCollector = traceCollector,
+                ChannelClient = channelClient
             },
             traceCollector: traceCollector);
 
@@ -257,6 +287,23 @@ public sealed class GatewayHost : IDotBotHost
         };
         await using var reg = cancellationToken.Register(() => tcs.TrySetResult());
         await tcs.Task;
+    }
+
+    private static ApprovalContext? BuildApprovalContext(CronPayload payload)
+    {
+        if (string.IsNullOrEmpty(payload.CreatorSource) || string.IsNullOrEmpty(payload.CreatorId))
+            return null;
+
+        var source = payload.CreatorSource switch
+        {
+            "qq"    => ApprovalSource.QQ,
+            "wecom" => ApprovalSource.WeCom,
+            "api"   => ApprovalSource.Api,
+            _       => ApprovalSource.Console
+        };
+        var groupId = source == ApprovalSource.QQ
+            && long.TryParse(payload.CreatorGroupId, out var gid) ? gid : 0L;
+        return new ApprovalContext { UserId = payload.CreatorId, Source = source, GroupId = groupId };
     }
 
     public ValueTask DisposeAsync()

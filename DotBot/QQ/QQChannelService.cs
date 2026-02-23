@@ -22,21 +22,21 @@ namespace DotBot.QQ;
 /// Gateway channel service for QQ Bot. Manages the QQ WebSocket connection,
 /// channel adapter, and agent lifecycle as part of a multi-channel gateway.
 /// </summary>
-public sealed class QQChannelService : IChannelService
+public sealed class QQChannelService(
+    IServiceProvider sp,
+    AppConfig config,
+    DotBotPaths paths,
+    SessionStore sessionStore,
+    MemoryStore memoryStore,
+    SkillsLoader skillsLoader,
+    PathBlacklist blacklist,
+    McpClientManager mcpClientManager,
+    QQBotClient qqClient,
+    QQPermissionService permissionService,
+    QQApprovalService qqApprovalService,
+    ModuleRegistry moduleRegistry)
+    : IChannelService
 {
-    private readonly IServiceProvider _sp;
-    private readonly AppConfig _config;
-    private readonly DotBotPaths _paths;
-    private readonly SessionStore _sessionStore;
-    private readonly MemoryStore _memoryStore;
-    private readonly SkillsLoader _skillsLoader;
-    private readonly PathBlacklist _blacklist;
-    private readonly McpClientManager _mcpClientManager;
-    private readonly QQBotClient _qqClient;
-    private readonly QQPermissionService _permissionService;
-    private readonly QQApprovalService _qqApprovalService;
-    private readonly ModuleRegistry _moduleRegistry;
-
     private QQChannelAdapter? _adapter;
 
     public string Name => "qq";
@@ -47,63 +47,41 @@ public sealed class QQChannelService : IChannelService
     /// <inheritdoc />
     public CronService? CronService { get; set; }
 
-    public QQChannelService(
-        IServiceProvider sp,
-        AppConfig config,
-        DotBotPaths paths,
-        SessionStore sessionStore,
-        MemoryStore memoryStore,
-        SkillsLoader skillsLoader,
-        PathBlacklist blacklist,
-        McpClientManager mcpClientManager,
-        QQBotClient qqClient,
-        QQPermissionService permissionService,
-        QQApprovalService qqApprovalService,
-        ModuleRegistry moduleRegistry)
-    {
-        _sp = sp;
-        _config = config;
-        _paths = paths;
-        _sessionStore = sessionStore;
-        _memoryStore = memoryStore;
-        _skillsLoader = skillsLoader;
-        _blacklist = blacklist;
-        _mcpClientManager = mcpClientManager;
-        _qqClient = qqClient;
-        _permissionService = permissionService;
-        _qqApprovalService = qqApprovalService;
-        _moduleRegistry = moduleRegistry;
-    }
+    /// <inheritdoc />
+    public IApprovalService ApprovalService => qqApprovalService;
+
+    /// <inheritdoc />
+    public object ChannelClient => qqClient;
 
     private AgentFactory BuildAgentFactory()
     {
-        var cronTools = _sp.GetService<CronTools>();
-        var traceCollector = _sp.GetService<TraceCollector>();
+        var cronTools = sp.GetService<CronTools>();
+        var traceCollector = sp.GetService<TraceCollector>();
 
         // Collect tool providers from modules
-        var toolProviders = ToolProviderCollector.Collect(_moduleRegistry, _config);
+        var toolProviders = ToolProviderCollector.Collect(moduleRegistry, config);
 
         return new AgentFactory(
-            _paths.BotPath, _paths.WorkspacePath, _config,
-            _memoryStore, _skillsLoader, _qqApprovalService, _blacklist,
+            paths.BotPath, paths.WorkspacePath, config,
+            memoryStore, skillsLoader, qqApprovalService, blacklist,
             toolProviders: toolProviders,
             toolProviderContext: new ToolProviderContext
             {
-                Config = _config,
+                Config = config,
                 ChatClient = new OpenAIClient(
-                    new ApiKeyCredential(_config.ApiKey),
-                    new OpenAIClientOptions { Endpoint = new Uri(_config.EndPoint) })
-                    .GetChatClient(_config.Model),
-                WorkspacePath = _paths.WorkspacePath,
-                BotPath = _paths.BotPath,
-                MemoryStore = _memoryStore,
-                SkillsLoader = _skillsLoader,
-                ApprovalService = _qqApprovalService,
-                PathBlacklist = _blacklist,
+                    new ApiKeyCredential(config.ApiKey),
+                    new OpenAIClientOptions { Endpoint = new Uri(config.EndPoint) })
+                    .GetChatClient(config.Model),
+                WorkspacePath = paths.WorkspacePath,
+                BotPath = paths.BotPath,
+                MemoryStore = memoryStore,
+                SkillsLoader = skillsLoader,
+                ApprovalService = qqApprovalService,
+                PathBlacklist = blacklist,
                 CronTools = cronTools,
-                McpClientManager = _mcpClientManager.Tools.Count > 0 ? _mcpClientManager : null,
+                McpClientManager = mcpClientManager.Tools.Count > 0 ? mcpClientManager : null,
                 TraceCollector = traceCollector,
-                ChannelClient = _qqClient
+                ChannelClient = qqClient
             },
             traceCollector: traceCollector);
     }
@@ -112,22 +90,22 @@ public sealed class QQChannelService : IChannelService
     {
         var agentFactory = BuildAgentFactory();
         var agent = agentFactory.CreateDefaultAgent();
-        var traceCollector = _sp.GetService<TraceCollector>();
-        var tokenUsageStore = _sp.GetService<TokenUsageStore>();
+        var traceCollector = sp.GetService<TraceCollector>();
+        var tokenUsageStore = sp.GetService<TokenUsageStore>();
 
         _adapter = new QQChannelAdapter(
-            _qqClient, agent, _sessionStore,
-            _permissionService, _qqApprovalService,
+            qqClient, agent, sessionStore,
+            permissionService, qqApprovalService,
             heartbeatService: HeartbeatService,
             cronService: CronService,
             agentFactory: agentFactory,
             traceCollector: traceCollector,
             tokenUsageStore: tokenUsageStore);
 
-        await _qqClient.StartAsync(cancellationToken);
+        await qqClient.StartAsync(cancellationToken);
 
         AnsiConsole.MarkupLine(
-            $"[green][[Gateway]][/] QQ Bot listening on ws://{_config.QQBot.Host}:{_config.QQBot.Port}/");
+            $"[green][[Gateway]][/] QQ Bot listening on ws://{config.QQBot.Host}:{config.QQBot.Port}/");
 
         var tcs = new TaskCompletionSource();
         await using var reg = cancellationToken.Register(() => tcs.TrySetResult());
@@ -138,7 +116,7 @@ public sealed class QQChannelService : IChannelService
 
     public async Task StopAsync()
     {
-        await _qqClient.StopAsync();
+        await qqClient.StopAsync();
     }
 
     public async Task DeliverMessageAsync(string target, string content)
@@ -149,13 +127,13 @@ public sealed class QQChannelService : IChannelService
             var groupIdStr = target["group:".Length..];
             if (long.TryParse(groupIdStr, out var groupId))
             {
-                await _qqClient.SendGroupMessageAsync(groupId, content);
+                await qqClient.SendGroupMessageAsync(groupId, content);
                 return;
             }
         }
 
         if (long.TryParse(target, out var userId))
-            await _qqClient.SendPrivateMessageAsync(userId, content);
+            await qqClient.SendPrivateMessageAsync(userId, content);
     }
 
     public async ValueTask DisposeAsync()

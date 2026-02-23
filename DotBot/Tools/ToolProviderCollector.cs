@@ -36,6 +36,7 @@ public static class ToolProviderCollector
         // Add system providers (these don't belong to any specific module)
         if (includeSystemProviders)
         {
+            providers.Add(new CoreToolProvider());
             providers.Add(new CronToolProvider());
             providers.Add(new McpToolProvider());
         }

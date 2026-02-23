@@ -45,7 +45,7 @@ public sealed partial class ApiModule : ModuleBase
 
     /// <inheritdoc />
     public override IEnumerable<IAgentToolProvider> GetToolProviders()
-        => [new CoreToolProvider()];
+        => [];
 
     /// <inheritdoc />
     public override IChannelService? CreateChannelService(IServiceProvider sp, ModuleContext context)

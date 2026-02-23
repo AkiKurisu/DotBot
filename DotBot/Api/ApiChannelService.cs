@@ -57,6 +57,12 @@ public sealed class ApiChannelService : IChannelService
     /// <inheritdoc />
     public CronService? CronService { get; set; }
 
+    /// <inheritdoc />
+    public IApprovalService ApprovalService { get; } = new AutoApproveApprovalService();
+
+    /// <inheritdoc />
+    public object? ChannelClient => null;
+
     /// <summary>
     /// Optional callback invoked by GatewayHost to inject additional routes (e.g. dashboard)
     /// onto this channel's WebApplication before it starts listening.

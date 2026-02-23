@@ -17,6 +17,11 @@ public sealed class CronPayload
     public string? To { get; set; }
     public string? CreatorId { get; set; }
     public string? CreatorSource { get; set; }
+    /// <summary>
+    /// The group ID the creator was in when the job was scheduled.
+    /// Separate from Channel (delivery target) so approval requests go to the right group.
+    /// </summary>
+    public string? CreatorGroupId { get; set; }
 }
 
 public sealed class CronJobState
