@@ -47,6 +47,9 @@ public sealed class QQChannelService : IChannelService
     /// <inheritdoc />
     public CronService? CronService { get; set; }
 
+    /// <inheritdoc />
+    public IApprovalService? ApprovalService => _qqApprovalService;
+
     public QQChannelService(
         IServiceProvider sp,
         AppConfig config,

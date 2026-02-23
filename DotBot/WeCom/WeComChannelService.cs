@@ -49,6 +49,9 @@ public sealed class WeComChannelService : IChannelService
     /// <inheritdoc />
     public CronService? CronService { get; set; }
 
+    /// <inheritdoc />
+    public IApprovalService? ApprovalService => _wecomApprovalService;
+
     public WeComChannelService(
         IServiceProvider sp,
         AppConfig config,

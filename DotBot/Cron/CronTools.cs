@@ -74,8 +74,12 @@ public sealed class CronTools(CronService cronService)
                 {
                     payload.CreatorId = qqContext.UserId.ToString();
                     payload.CreatorSource = "qq";
-                    if (qqContext.IsGroupMessage && payload.Channel == null)
-                        payload.Channel = qqContext.GroupId.ToString();
+                    if (qqContext.IsGroupMessage)
+                    {
+                        payload.CreatorGroupId = qqContext.GroupId.ToString();
+                        if (payload.Channel == null)
+                            payload.Channel = qqContext.GroupId.ToString();
+                    }
                 }
                 else
                 {

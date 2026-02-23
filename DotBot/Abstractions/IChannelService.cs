@@ -1,5 +1,6 @@
 using DotBot.Cron;
 using DotBot.Heartbeat;
+using DotBot.Security;
 
 namespace DotBot.Abstractions;
 
@@ -25,6 +26,12 @@ public interface IChannelService : IAsyncDisposable
     /// Allows slash commands (/cron) to operate within this channel.
     /// </summary>
     CronService? CronService { get; set; }
+
+    /// <summary>
+    /// The channel-specific approval service, if any.
+    /// Used by GatewayHost to route background-task approvals back to the originating channel.
+    /// </summary>
+    IApprovalService? ApprovalService { get; }
 
     /// <summary>
     /// Starts the channel service. This is a long-running task that completes
