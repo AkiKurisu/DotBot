@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -40,11 +41,14 @@ public sealed class SkillsLoader(string workspaceRoot)
                     var metadata = GetSkillMetadata(name);
                     var requirements = GetSkillRequirements(metadata);
 
+                    // Skills deployed by DeployBuiltInSkills() carry a .builtin marker
+                    var isBuiltIn = File.Exists(Path.Combine(dir, ".builtin"));
+
                     var skillInfo = new SkillInfo
                     {
                         Name = name,
                         Path = skillFile,
-                        Source = "workspace",
+                        Source = isBuiltIn ? "builtin" : "workspace",
                         Requirements = requirements
                     };
 
@@ -135,6 +139,71 @@ public sealed class SkillsLoader(string workspaceRoot)
         }
 
         return parts.Count > 0 ? string.Join("\n\n---\n\n", parts) : string.Empty;
+    }
+
+    /// <summary>
+    /// Deploy built-in skills (embedded in the assembly) to the user skills directory.
+    /// Skips skills that were created by the user (no .builtin marker) and skills
+    /// that are already up to date.
+    /// </summary>
+    public void DeployBuiltInSkills()
+    {
+        const string resourcePrefix = "DotBot.Skills.BuiltIn.";
+        const string markerFile = ".builtin";
+
+        var assembly = Assembly.GetExecutingAssembly();
+        var currentVersion = assembly.GetName().Version?.ToString() ?? "0.0.0.0";
+
+        // Group resources by skill name
+        var resourcesBySkill = assembly.GetManifestResourceNames()
+            .Where(name => name.StartsWith(resourcePrefix, StringComparison.Ordinal))
+            .Select(name =>
+            {
+                var remainder = name[resourcePrefix.Length..];
+                var dotIndex = remainder.IndexOf('.');
+                // Resources at the BuiltIn root (e.g. .gitkeep) have no skill prefix
+                if (dotIndex <= 0)
+                    return (SkillName: string.Empty, FileName: remainder, ResourceName: name);
+                return (
+                    SkillName: remainder[..dotIndex],
+                    FileName: remainder[(dotIndex + 1)..],
+                    ResourceName: name
+                );
+            })
+            .Where(r => !string.IsNullOrEmpty(r.SkillName))
+            .GroupBy(r => r.SkillName);
+
+        Directory.CreateDirectory(WorkspaceSkillsPath);
+
+        foreach (var skillGroup in resourcesBySkill)
+        {
+            var skillName = skillGroup.Key;
+            var skillDir = Path.Combine(WorkspaceSkillsPath, skillName);
+            var markerPath = Path.Combine(skillDir, markerFile);
+
+            // If the skill directory exists but has no .builtin marker, the user owns it
+            if (Directory.Exists(skillDir) && !File.Exists(markerPath))
+                continue;
+
+            // If the skill is already at the current version, skip it
+            if (File.Exists(markerPath) && File.ReadAllText(markerPath).Trim() == currentVersion)
+                continue;
+
+            Directory.CreateDirectory(skillDir);
+
+            foreach (var resource in skillGroup)
+            {
+                using var stream = assembly.GetManifestResourceStream(resource.ResourceName);
+                if (stream == null)
+                    continue;
+
+                var targetPath = Path.Combine(skillDir, resource.FileName);
+                using var file = File.Create(targetPath);
+                stream.CopyTo(file);
+            }
+
+            File.WriteAllText(markerPath, currentVersion);
+        }
     }
 
     /// <summary>

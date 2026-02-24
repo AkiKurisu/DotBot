@@ -604,6 +604,33 @@ DotBot's built-in `Tools.Web.SearchProvider: "Exa"` uses a manual MCP call appro
 2. Switch `Tools.Web.SearchProvider` to `Bing` or another provider
 3. The Agent will get all Exa tools via MCP (not just search), including `web_search_exa`, `research_exa`, etc.
 
+### Browser Automation (Playwright MCP)
+
+Microsoft provides an official [`@playwright/mcp`](https://github.com/microsoft/playwright-mcp) MCP server that enables the Agent to control a real browser (Chromium/Firefox/WebKit) for web interaction tasks. It operates on the accessibility tree rather than screenshots — fast, deterministic, and no vision model required.
+
+**Prerequisites**: Node.js 18+, plus install the browser:
+
+```bash
+npx playwright install chromium
+```
+
+**Configuration** (add to `appsettings.json`):
+
+```json
+{
+    "McpServers": [
+        {
+            "Name": "playwright",
+            "Transport": "stdio",
+            "Command": "npx",
+            "Arguments": ["-y", "@playwright/mcp@latest"]
+        }
+    ]
+}
+```
+
+Once configured, the Agent automatically gains 22 browser control tools, including: `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_fill_form`, `browser_take_screenshot`, and more.
+
 ---
 
 ## QQ Bot Commands

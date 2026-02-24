@@ -30,7 +30,9 @@ public static class ServiceRegistration
         services.AddSingleton(new MemoryStore(botPath));
         services.AddSingleton(new SessionStore(botPath, config.CompactSessions));
         services.AddSingleton(new ApprovalStore(botPath));
-        services.AddSingleton(new SkillsLoader(botPath));
+        var skillsLoader = new SkillsLoader(botPath);
+        skillsLoader.DeployBuiltInSkills();
+        services.AddSingleton(skillsLoader);
         services.AddSingleton(new LanguageService(config.Language));
 
         var cronStorePath = Path.Combine(botPath, config.Cron.StorePath);

@@ -604,6 +604,33 @@ DotBot 内置的 `Tools.Web.SearchProvider: "Exa"` 使用的是手动 MCP 调用
 2. 将 `Tools.Web.SearchProvider` 切换为 `Bing` 或其他提供商
 3. Agent 将通过 MCP 获得 Exa 的所有工具（不仅是搜索），包括 `web_search_exa`、`research_exa` 等
 
+### 浏览器自动化（Playwright MCP）
+
+微软官方提供了 [`@playwright/mcp`](https://github.com/microsoft/playwright-mcp) MCP 服务器，可让 Agent 控制真实浏览器（Chromium/Firefox/WebKit）执行网页交互任务。该方案基于无障碍树（Accessibility Tree）而非截图，速度快、确定性强，无需视觉模型。
+
+**前置条件**：Node.js 18+，以及安装浏览器：
+
+```bash
+npx playwright install chromium
+```
+
+**配置示例**（添加到 `appsettings.json`）：
+
+```json
+{
+    "McpServers": [
+        {
+            "Name": "playwright",
+            "Transport": "stdio",
+            "Command": "npx",
+            "Arguments": ["-y", "@playwright/mcp@latest"]
+        }
+    ]
+}
+```
+
+配置后，Agent 将自动获得 22 个浏览器控制工具，包括：`browser_navigate`、`browser_snapshot`、`browser_click`、`browser_type`、`browser_fill_form`、`browser_take_screenshot` 等。
+
 ---
 
 ## QQ Bot 命令

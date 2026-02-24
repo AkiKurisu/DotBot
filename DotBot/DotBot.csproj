@@ -7,8 +7,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
 
     <!-- Version Information -->
-    <AssemblyVersion>1.0.1.0</AssemblyVersion>
-    <Version>1.0.1.0</Version>
+    <AssemblyVersion>1.0.2.0</AssemblyVersion>
+    <Version>1.0.2.0</Version>
     <AssemblyTitle>DotBot</AssemblyTitle>
     <ProductName>DotBot</ProductName>
     <ApplicationIcon>Resources\favicon.ico</ApplicationIcon>
@@ -26,6 +26,7 @@
   <ItemGroup>
     <Content Include="Resources\favicon.ico" />
     <EmbeddedResource Include="Resources\DashBoard.html" />
+    <EmbeddedResource Include="Skills\BuiltIn\**\*" />
   </ItemGroup>
 
   <ItemGroup>

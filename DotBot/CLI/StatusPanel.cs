@@ -89,8 +89,13 @@ public static class StatusPanel
                 ? $"[green]✓ {Strings.Available(lang)}[/]"
                 : $"[red]✗ {skill.UnavailableReason?.Escape() ?? Strings.Unavailable(lang)}[/]";
 
-            var sourceColor = skill.Source == "workspace" ? "blue" : "grey";
-            var source = $"[{sourceColor}]{skill.Source}[/]";
+            var (sourceColor, sourceLabel) = skill.Source switch
+            {
+                "workspace" => ("blue", "workspace"),
+                "builtin" => ("yellow", "builtin"),
+                _ => ("grey", skill.Source)
+            };
+            var source = $"[{sourceColor}]{sourceLabel}[/]";
 
             var description = GetSkillDescription(skill, lang).Escape();
 
