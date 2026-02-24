@@ -231,6 +231,7 @@ public sealed class AgentFactory
         LastCreatedTools = tools;
 
         var chatClientBuilder = new ChatClientBuilder(_chatClient.AsIChatClient());
+        chatClientBuilder.Use(innerClient => new ImageContentSanitizingChatClient(innerClient));
         if (_traceCollector != null)
         {
             var tc = _traceCollector;
@@ -271,6 +272,7 @@ public sealed class AgentFactory
     public IChatClient CreateTracingChatClient(TraceCollector? traceCollector = null)
     {
         var chatClientBuilder = new ChatClientBuilder(_chatClient.AsIChatClient());
+        chatClientBuilder.Use(innerClient => new ImageContentSanitizingChatClient(innerClient));
         chatClientBuilder.Use(innerClient => new ToolCallFilteringChatClient(innerClient));
         if (traceCollector != null)
         {
