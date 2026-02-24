@@ -254,6 +254,19 @@ public sealed class WeComChannelAdapter : IAsyncDisposable
 
             await _sessionStore.SaveAsync(_agent, session, sessionId, CancellationToken.None);
         }
+        catch (SessionGateOverflowException)
+        {
+            AnsiConsole.MarkupLine(
+                $"[grey][[WeCom]][/] [yellow]Request evicted for session {Markup.Escape(sessionId)} (queue overflow)[/]");
+            try
+            {
+                await pusher.PushTextAsync("消息过多，该条已跳过，请稍后重试。");
+            }
+            catch
+            {
+                // ignored
+            }
+        }
         catch (Exception ex)
         {
             LogError(from.Name, ex.Message);

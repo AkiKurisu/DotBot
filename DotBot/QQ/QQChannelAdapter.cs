@@ -292,6 +292,19 @@ public sealed class QQChannelAdapter : IAsyncDisposable
 
             await _sessionStore.SaveAsync(_agent, session, sessionId, CancellationToken.None);
         }
+        catch (SessionGateOverflowException)
+        {
+            AnsiConsole.MarkupLine(
+                $"[grey][[QQ]][/] [yellow]Request evicted for session {Markup.Escape(sessionId)} (queue overflow)[/]");
+            try
+            {
+                await _client.SendMessageAsync(evt, "消息过多，该条已跳过，请稍后重试。");
+            }
+            catch
+            {
+                // ignored
+            }
+        }
         catch (Exception ex)
         {
             LogError(evt.Sender.DisplayName, ex.Message);

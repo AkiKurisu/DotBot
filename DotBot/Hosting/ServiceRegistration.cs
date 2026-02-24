@@ -38,7 +38,7 @@ public static class ServiceRegistration
         services.AddSingleton<CronTools>(sp => new CronTools(sp.GetRequiredService<CronService>()));
 
         services.AddSingleton<McpClientManager>();
-        services.AddSingleton<SessionGate>();
+        services.AddSingleton(new SessionGate(config.MaxSessionQueueSize));
 
         // Register configuration validation
         services.AddConfigurationValidation();

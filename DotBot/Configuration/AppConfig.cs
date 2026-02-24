@@ -31,6 +31,13 @@ public sealed class AppConfig
     public int SubagentMaxConcurrency { get; set; } = 3;
 
     /// <summary>
+    /// Maximum number of pending requests per session in the gateway queue.
+    /// When exceeded, the oldest waiting request is evicted and the user is notified.
+    /// Set to 0 to disable the limit (unlimited queue).
+    /// </summary>
+    public int MaxSessionQueueSize { get; set; } = 3;
+
+    /// <summary>
     /// Enable compact sessions to reduce context cost but may cause context cache miss.
     /// </summary>
     public bool CompactSessions { get; set; } = true;

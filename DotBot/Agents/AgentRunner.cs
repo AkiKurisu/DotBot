@@ -46,8 +46,18 @@ public sealed class AgentRunner(AIAgent agent, SessionStore sessionStore, AgentF
             $"[grey][[{tag}]][/] Running: [dim]{Markup.Escape(prompt.Length > 120 ? prompt[..120] + "..." : prompt)}[/]");
 
         IDisposable? gateLock = null;
-        if (sessionGate != null)
-            gateLock = await sessionGate.AcquireAsync(sessionKey);
+        try
+        {
+            if (sessionGate != null)
+                gateLock = await sessionGate.AcquireAsync(sessionKey);
+        }
+        catch (SessionGateOverflowException)
+        {
+            AnsiConsole.MarkupLine(
+                $"[grey][[{tag}]][/] [yellow]Request evicted for session {Markup.Escape(sessionKey)} (queue overflow)[/]");
+            return null;
+        }
+
         try
         {
 
