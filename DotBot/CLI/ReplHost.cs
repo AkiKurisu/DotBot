@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text;
 using DotBot.Agents;
 using DotBot.CLI.Rendering;
@@ -21,7 +20,7 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
     string workspacePath = "", string cortexBotPath = "", AppConfig? config = null, 
     HeartbeatService? heartbeatService = null, CronService? cronService = null,
     AgentFactory? agentFactory = null, McpClientManager? mcpClientManager = null,
-    TraceCollector? traceCollector = null, string? dashBoardUrl = null,
+    string? dashBoardUrl = null,
     LanguageService? languageService = null, TokenUsageStore? tokenUsageStore = null)
 {
     private readonly AppConfig _config = config ?? new AppConfig();
@@ -585,10 +584,6 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
 
                 TracingChatClient.CurrentSessionKey = _currentSessionId;
                 TracingChatClient.ResetCallState(_currentSessionId);
-                traceCollector?.RecordRequest(_currentSessionId, userInput);
-                var toolTimers = new Dictionary<string, Stopwatch>();
-                var toolNameMap = new Dictionary<string, string>();
-                var responseBuffer = new StringBuilder();
                 long inputTokens = 0, outputTokens = 0;
 
                 // Get streaming updates from agent
@@ -603,21 +598,16 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
                 // Wait for renderer to finish
                 await renderer.StopAsync();
 
-                if (traceCollector != null)
+                if (inputTokens > 0 || outputTokens > 0)
                 {
-                    traceCollector.RecordResponse(_currentSessionId, responseBuffer.Length > 0 ? responseBuffer.ToString() : null);
-                    if (inputTokens > 0 || outputTokens > 0)
+                    tokenUsageStore?.Record(new TokenUsageRecord
                     {
-                        traceCollector.RecordTokenUsage(_currentSessionId, inputTokens, outputTokens);
-                        tokenUsageStore?.Record(new TokenUsageRecord
-                        {
-                            Source = TokenUsageSource.Cli,
-                            UserId = "local",
-                            DisplayName = "CLI",
-                            InputTokens = inputTokens,
-                            OutputTokens = outputTokens
-                        });
-                    }
+                        Source = TokenUsageSource.Cli,
+                        UserId = "local",
+                        DisplayName = "CLI",
+                        InputTokens = inputTokens,
+                        OutputTokens = outputTokens
+                    });
                 }
 
                 return true;
@@ -626,43 +616,15 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
                 {
                     await foreach (var update in source.WithCancellation(cancellationToken))
                     {
-                        if (traceCollector != null)
+                        foreach (var content in update.Contents)
                         {
-                            foreach (var content in update.Contents)
+                            if (content is UsageContent usage)
                             {
-                                switch (content)
-                                {
-                                    case FunctionCallContent fc:
-                                        traceCollector.RecordToolCallStarted(_currentSessionId, fc);
-                                        if (!string.IsNullOrEmpty(fc.CallId))
-                                        {
-                                            toolTimers[fc.CallId] = Stopwatch.StartNew();
-                                            toolNameMap[fc.CallId] = fc.Name;
-                                        }
-                                        break;
-                                    case FunctionResultContent fr:
-                                        double durationMs = 0;
-                                        if (!string.IsNullOrEmpty(fr.CallId) && toolTimers.TryGetValue(fr.CallId, out var sw))
-                                        {
-                                            sw.Stop();
-                                            durationMs = sw.Elapsed.TotalMilliseconds;
-                                            toolTimers.Remove(fr.CallId);
-                                        }
-                                        string? toolName = null;
-                                        if (!string.IsNullOrEmpty(fr.CallId))
-                                            toolNameMap.TryGetValue(fr.CallId, out toolName);
-                                        traceCollector.RecordToolCallCompleted(_currentSessionId, fr, toolName, durationMs);
-                                        break;
-                                    case UsageContent usage:
-                                        if (usage.Details.InputTokenCount.HasValue)
-                                            inputTokens = usage.Details.InputTokenCount.Value;
-                                        if (usage.Details.OutputTokenCount.HasValue)
-                                            outputTokens = usage.Details.OutputTokenCount.Value;
-                                        break;
-                                }
+                                if (usage.Details.InputTokenCount.HasValue)
+                                    inputTokens = usage.Details.InputTokenCount.Value;
+                                if (usage.Details.OutputTokenCount.HasValue)
+                                    outputTokens = usage.Details.OutputTokenCount.Value;
                             }
-                            if (!string.IsNullOrEmpty(update.Text))
-                                responseBuffer.Append(update.Text);
                         }
                         yield return update;
                     }

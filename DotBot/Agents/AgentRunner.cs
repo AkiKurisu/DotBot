@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -70,10 +69,6 @@ public sealed class AgentRunner(AIAgent agent, SessionStore sessionStore, AgentF
             sessionKey,
             null,
             agentFactory?.LastCreatedTools?.Select(t => t.Name));
-        traceCollector?.RecordRequest(sessionKey, prompt);
-
-        var toolTimers = new Dictionary<string, Stopwatch>();
-        var toolNameMap = new Dictionary<string, string>();
 
         TracingChatClient.CurrentSessionKey = sessionKey;
         TracingChatClient.ResetCallState(sessionKey);
@@ -103,13 +98,6 @@ public sealed class AgentRunner(AIAgent agent, SessionStore sessionStore, AgentF
 
                             var preview = argsStr.Length > 150 ? argsStr[..150] + "..." : argsStr;
                             AnsiConsole.MarkupLine($"[grey][[{tag}]][/] [yellow]{Markup.Escape($"{icon} {fc.Name}")}[/] [dim]{Markup.Escape(preview)}[/]");
-
-                            traceCollector?.RecordToolCallStarted(sessionKey, fc);
-                            if (!string.IsNullOrEmpty(fc.CallId))
-                            {
-                                toolTimers[fc.CallId] = Stopwatch.StartNew();
-                                toolNameMap[fc.CallId] = fc.Name;
-                            }
                             break;
                         }
                         case FunctionResultContent fr:
@@ -117,18 +105,6 @@ public sealed class AgentRunner(AIAgent agent, SessionStore sessionStore, AgentF
                             var result = fr.Result?.ToString() ?? "(no output)";
                             var preview = result.Length > 200 ? result[..200] + "..." : result;
                             AnsiConsole.MarkupLine($"[grey][[{tag}]][/] [grey]Result: {Markup.Escape(preview)}[/]");
-
-                            double durationMs = 0;
-                            if (!string.IsNullOrEmpty(fr.CallId) && toolTimers.TryGetValue(fr.CallId, out var sw))
-                            {
-                                sw.Stop();
-                                durationMs = sw.Elapsed.TotalMilliseconds;
-                                toolTimers.Remove(fr.CallId);
-                            }
-                            string? toolName = null;
-                            if (!string.IsNullOrEmpty(fr.CallId))
-                                toolNameMap.TryGetValue(fr.CallId, out toolName);
-                            traceCollector?.RecordToolCallCompleted(sessionKey, fr, toolName, durationMs);
                             break;
                         }
                         case UsageContent usage:
@@ -159,8 +135,6 @@ public sealed class AgentRunner(AIAgent agent, SessionStore sessionStore, AgentF
         await sessionStore.SaveAsync(agent, session, sessionKey, CancellationToken.None);
         var response = sb.Length > 0 ? sb.ToString() : null;
 
-        traceCollector?.RecordResponse(sessionKey, response);
-
         if (response != null)
         {
             AnsiConsole.MarkupLine($"[grey][[{tag}]][/] Response: [dim]{Markup.Escape(response.Length > 200 ? response[..200] + "..." : response)}[/]");
@@ -172,7 +146,6 @@ public sealed class AgentRunner(AIAgent agent, SessionStore sessionStore, AgentF
             var displayInput = tokenTracker?.LastInputTokens ?? inputTokens;
             var displayOutput = tokenTracker?.TotalOutputTokens ?? outputTokens;
             AnsiConsole.MarkupLine($"[grey][[{tag}]][/] [blue]↑ {displayInput} input[/] [green]↓ {displayOutput} output[/]");
-            traceCollector?.RecordTokenUsage(sessionKey, inputTokens, outputTokens);
         }
 
         if (agentFactory is { Compactor: not null, MaxContextTokens: > 0 } &&

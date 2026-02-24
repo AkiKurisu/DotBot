@@ -93,7 +93,7 @@ public sealed class CliHost(
             paths.WorkspacePath, paths.BotPath, config,
             heartbeatService: heartbeatService, cronService: cronService,
             agentFactory: agentFactory, mcpClientManager: mcpClientManager,
-            traceCollector: traceCollector, dashBoardUrl: dashBoardUrl,
+            dashBoardUrl: dashBoardUrl,
             languageService: languageService, tokenUsageStore: tokenUsageStore);
 
         cronService.OnJob = async job =>

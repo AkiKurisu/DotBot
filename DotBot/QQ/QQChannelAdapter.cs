@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -173,14 +172,11 @@ public sealed class QQChannelAdapter : IAsyncDisposable
             var textBuffer = new StringBuilder();
             long inputTokens = 0, outputTokens = 0, totalTokens = 0;
             var tokenTracker = _agentFactory?.GetOrCreateTokenTracker(sessionId);
-            var toolTimers = new Dictionary<string, Stopwatch>();
-            var toolNameMap = new Dictionary<string, string>();
 
             _traceCollector?.RecordSessionMetadata(
                 sessionId,
                 null,
                 _agentFactory?.LastCreatedTools?.Select(t => t.Name));
-            _traceCollector?.RecordRequest(sessionId, plainText);
 
             TracingChatClient.CurrentSessionKey = sessionId;
             TracingChatClient.ResetCallState(sessionId);
@@ -199,28 +195,10 @@ public sealed class QQChannelAdapter : IAsyncDisposable
                                 var toolNotice = $"{icon} 正在调用: {functionCall.Name}...";
                                 await _client.SendMessageAsync(evt, toolNotice);
                                 LogOutgoing(evt, toolNotice);
-
                                 LogToolCall(functionCall.Name, functionCall.Arguments);
-                                _traceCollector?.RecordToolCallStarted(sessionId, functionCall);
-                                if (!string.IsNullOrEmpty(functionCall.CallId))
-                                {
-                                    toolTimers[functionCall.CallId] = Stopwatch.StartNew();
-                                    toolNameMap[functionCall.CallId] = functionCall.Name;
-                                }
                                 break;
                             case FunctionResultContent fr:
                                 LogToolResult(fr.Result?.ToString());
-                                double durationMs = 0;
-                                if (!string.IsNullOrEmpty(fr.CallId) && toolTimers.TryGetValue(fr.CallId, out var sw))
-                                {
-                                    sw.Stop();
-                                    durationMs = sw.Elapsed.TotalMilliseconds;
-                                    toolTimers.Remove(fr.CallId);
-                                }
-                                string? toolName = null;
-                                if (!string.IsNullOrEmpty(fr.CallId))
-                                    toolNameMap.TryGetValue(fr.CallId, out toolName);
-                                _traceCollector?.RecordToolCallCompleted(sessionId, fr, toolName, durationMs);
                                 break;
                             case UsageContent usage:
                                 if (usage.Details.InputTokenCount.HasValue)
@@ -246,9 +224,6 @@ public sealed class QQChannelAdapter : IAsyncDisposable
             if (totalTokens == 0 && (inputTokens > 0 || outputTokens > 0))
                 totalTokens = inputTokens + outputTokens;
 
-
-            var responseText = textBuffer.ToString();
-
             if (totalTokens > 0)
             {
                 tokenTracker?.Update(inputTokens, outputTokens);
@@ -258,12 +233,9 @@ public sealed class QQChannelAdapter : IAsyncDisposable
             }
 
             await FlushTextBufferAsync(evt, textBuffer);
-            _traceCollector?.RecordResponse(sessionId, string.IsNullOrWhiteSpace(responseText) ? null : responseText);
 
             if (totalTokens > 0)
             {
-                _traceCollector?.RecordTokenUsage(sessionId, inputTokens, outputTokens);
-
                 _tokenUsageStore?.Record(new TokenUsageRecord
                 {
                     Source = evt.IsGroupMessage ? TokenUsageSource.QQGroup : TokenUsageSource.QQPrivate,
