@@ -50,7 +50,8 @@ public static class DashBoardMiddleware
                 avgToolDurationMs = s.AvgToolDurationMs,
                 maxToolDurationMs = s.MaxToolDurationMs,
                 finalSystemPrompt = s.FinalSystemPrompt,
-                toolNames = s.ToolNames
+                toolNames = s.ToolNames,
+                lastFinishReason = s.LastFinishReason
             });
             return Results.Json(result, JsonOptions);
         });

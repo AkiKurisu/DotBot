@@ -42,6 +42,8 @@ public sealed class TraceStore(string? storagePath = null, int maxEventsPerSessi
                 break;
             case TraceEventType.Response:
                 session.ResponseCount++;
+                if (!string.IsNullOrEmpty(evt.FinishReason))
+                    session.LastFinishReason = evt.FinishReason;
                 break;
             case TraceEventType.ToolCallCompleted:
                 session.ToolCallCount++;
@@ -200,6 +202,8 @@ public sealed class TraceStore(string? storagePath = null, int maxEventsPerSessi
                             break;
                         case TraceEventType.Response:
                             session.ResponseCount++;
+                            if (!string.IsNullOrEmpty(evt.FinishReason))
+                                session.LastFinishReason = evt.FinishReason;
                             break;
                         case TraceEventType.ToolCallCompleted:
                             session.ToolCallCount++;
