@@ -8,6 +8,7 @@ using DotBot.Configuration;
 using DotBot.Context;
 using DotBot.Cron;
 using DotBot.DashBoard;
+using DotBot.Gateway;
 using DotBot.Heartbeat;
 using DotBot.Hosting;
 using DotBot.Mcp;
@@ -227,7 +228,8 @@ public sealed class ApiChannelService : IChannelService
         _webApp.MapOpenAIChatCompletions(agentBuilder);
 
         var agent = _agentFactory.CreateAgentWithTools(tools);
-        var runner = new AgentRunner(agent, _sessionStore, _agentFactory, traceCollector);
+        var sessionGate = _sp.GetRequiredService<SessionGate>();
+        var runner = new AgentRunner(agent, _sessionStore, _agentFactory, traceCollector, sessionGate);
 
         MapAdditionalRoutes(_webApp, runner);
 

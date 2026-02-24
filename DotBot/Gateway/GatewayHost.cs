@@ -246,7 +246,8 @@ public sealed class GatewayHost : IDotBotHost
             traceCollector: traceCollector);
 
         var agent = agentFactory.CreateDefaultAgent();
-        var runner = new AgentRunner(agent, _sessionStore, agentFactory, traceCollector);
+        var sessionGate = _sp.GetRequiredService<SessionGate>();
+        var runner = new AgentRunner(agent, _sessionStore, agentFactory, traceCollector, sessionGate);
         return runner.RunAsync;
     }
 

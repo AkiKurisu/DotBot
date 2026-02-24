@@ -8,6 +8,7 @@ using DotBot.Commands.ChannelAdapters;
 using DotBot.Commands.Core;
 using DotBot.Cron;
 using DotBot.DashBoard;
+using DotBot.Gateway;
 using DotBot.Heartbeat;
 using DotBot.Memory;
 using DotBot.QQ.OneBot;
@@ -38,6 +39,8 @@ public sealed class QQChannelAdapter : IAsyncDisposable
 
     private readonly TraceCollector? _traceCollector;
 
+    private readonly SessionGate _sessionGate;
+
     private readonly TokenUsageStore? _tokenUsageStore;
     
     private readonly CommandDispatcher _commandDispatcher;
@@ -49,6 +52,7 @@ public sealed class QQChannelAdapter : IAsyncDisposable
         AIAgent agent,
         SessionStore sessionStore,
         QQPermissionService permissionService,
+        SessionGate sessionGate,
         QQApprovalService? approvalService = null,
         HeartbeatService? heartbeatService = null,
         CronService? cronService = null,
@@ -64,6 +68,7 @@ public sealed class QQChannelAdapter : IAsyncDisposable
         _heartbeatService = heartbeatService;
         _cronService = cronService;
         _agentFactory = agentFactory;
+        _sessionGate = sessionGate;
         _traceCollector = traceCollector;
         _tokenUsageStore = tokenUsageStore;
         
@@ -161,6 +166,7 @@ public sealed class QQChannelAdapter : IAsyncDisposable
         {
             using var _ = ApprovalContextScope.Set(approvalContext);
             using var __ = QQChatContextScope.Set(chatContext);
+            using var ___ = await _sessionGate.AcquireAsync(sessionId);
 
             var session = await _sessionStore.LoadOrCreateAsync(_agent, sessionId, CancellationToken.None);
 

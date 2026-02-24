@@ -7,6 +7,7 @@ using DotBot.Commands.ChannelAdapters;
 using DotBot.Commands.Core;
 using DotBot.Cron;
 using DotBot.DashBoard;
+using DotBot.Gateway;
 using DotBot.Heartbeat;
 using DotBot.Memory;
 using DotBot.Security;
@@ -33,6 +34,8 @@ public sealed class WeComChannelAdapter : IAsyncDisposable
     
     private readonly WeComApprovalService _approvalService;
 
+    private readonly SessionGate _sessionGate;
+
     private readonly TraceCollector? _traceCollector;
 
     private readonly TokenUsageStore? _tokenUsageStore;
@@ -47,6 +50,7 @@ public sealed class WeComChannelAdapter : IAsyncDisposable
         WeComBotRegistry registry,
         WeComPermissionService permissionService,
         WeComApprovalService approvalService,
+        SessionGate sessionGate,
         HeartbeatService? heartbeatService = null,
         CronService? cronService = null,
         AgentFactory? agentFactory = null,
@@ -60,6 +64,7 @@ public sealed class WeComChannelAdapter : IAsyncDisposable
         _agentFactory = agentFactory;
         _permissionService = permissionService;
         _approvalService = approvalService;
+        _sessionGate = sessionGate;
         _traceCollector = traceCollector;
         _tokenUsageStore = tokenUsageStore;
         
@@ -136,6 +141,7 @@ public sealed class WeComChannelAdapter : IAsyncDisposable
                 UserId = from.UserId,
                 UserName = from.Name
             });
+            using var ____ = await _sessionGate.AcquireAsync(sessionId);
 
             var session = await _sessionStore.LoadOrCreateAsync(_agent, sessionId, CancellationToken.None);
 

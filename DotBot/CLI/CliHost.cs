@@ -5,6 +5,7 @@ using DotBot.Agents;
 using DotBot.Configuration;
 using DotBot.Cron;
 using DotBot.DashBoard;
+using DotBot.Gateway;
 using DotBot.Heartbeat;
 using DotBot.Hosting;
 using DotBot.Localization;
@@ -70,7 +71,8 @@ public sealed class CliHost(
             traceCollector: traceCollector);
 
         var agent = agentFactory.CreateDefaultAgent();
-        var runner = new AgentRunner(agent, sessionStore, agentFactory, traceCollector);
+        var sessionGate = sp.GetRequiredService<SessionGate>();
+        var runner = new AgentRunner(agent, sessionStore, agentFactory, traceCollector, sessionGate);
 
         DashBoardServer? dashBoardServer = null;
         string? dashBoardUrl = null;
