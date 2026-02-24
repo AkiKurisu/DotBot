@@ -198,7 +198,7 @@ public sealed class QQChannelAdapter : IAsyncDisposable
                                 LogToolCall(functionCall.Name, functionCall.Arguments);
                                 break;
                             case FunctionResultContent fr:
-                                LogToolResult(fr.Result?.ToString());
+                                LogToolResult(Agents.ImageContentSanitizingChatClient.DescribeResult(fr.Result));
                                 break;
                             case UsageContent usage:
                                 if (usage.Details.InputTokenCount.HasValue)

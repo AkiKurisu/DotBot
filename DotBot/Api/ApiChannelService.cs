@@ -138,7 +138,7 @@ public sealed class ApiChannelService : IChannelService
 
         var agentBuilder = builder.AddAIAgent(
             "dotbot",
-            _agentFactory.CreateTracingChatClient(traceCollector),
+            _agentFactory.CreateToolCallFilteringChatClient(),
             CreateApiAgentOptions(tools, traceCollector))
             .WithAITools(tools.ToArray());
 

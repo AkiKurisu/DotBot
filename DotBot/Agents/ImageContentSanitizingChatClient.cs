@@ -76,7 +76,7 @@ public sealed class ImageContentSanitizingChatClient(IChatClient innerClient) : 
         return false;
     }
 
-    private static string DescribeResult(object? result)
+    internal static string DescribeResult(object? result)
     {
         if (result is not IEnumerable<AIContent> items)
             return result?.ToString() ?? "(no output)";
@@ -92,7 +92,7 @@ public sealed class ImageContentSanitizingChatClient(IChatClient innerClient) : 
                     break;
                 case DataContent dc:
                 {
-                    var mediaType = dc.MediaType ?? "application/octet-stream";
+                    var mediaType = dc.MediaType;
                     var size = dc.Data.Length;
                     parts.Add(mediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
                         ? $"[Image ({mediaType}), {size:N0} bytes]"

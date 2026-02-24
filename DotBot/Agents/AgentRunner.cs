@@ -102,7 +102,7 @@ public sealed class AgentRunner(AIAgent agent, SessionStore sessionStore, AgentF
                         }
                         case FunctionResultContent fr:
                         {
-                            var result = fr.Result?.ToString() ?? "(no output)";
+                            var result = ImageContentSanitizingChatClient.DescribeResult(fr.Result);
                             var preview = result.Length > 200 ? result[..200] + "..." : result;
                             AnsiConsole.MarkupLine($"[grey][[{tag}]][/] [grey]Result: {Markup.Escape(preview)}[/]");
                             break;
