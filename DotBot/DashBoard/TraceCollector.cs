@@ -106,7 +106,7 @@ public sealed class TraceCollector(TraceStore store)
 
     public void RecordToolCallCompleted(string sessionKey, FunctionResultContent fr, string? toolName, double durationMs)
     {
-        var result = fr.Result?.ToString() ?? "(no output)";
+        var result = Agents.ImageContentSanitizingChatClient.DescribeResult(fr.Result);
         store.Record(new TraceEvent
         {
             Type = TraceEventType.ToolCallCompleted,

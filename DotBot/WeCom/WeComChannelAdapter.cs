@@ -174,7 +174,7 @@ public sealed class WeComChannelAdapter : IAsyncDisposable
                                 break;
 
                             case FunctionResultContent fr:
-                                LogToolResult(fr.Result?.ToString());
+                                LogToolResult(Agents.ImageContentSanitizingChatClient.DescribeResult(fr.Result));
                                 break;
 
                             case UsageContent usage:

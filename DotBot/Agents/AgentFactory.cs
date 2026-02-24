@@ -230,6 +230,8 @@ public sealed class AgentFactory
     {
         LastCreatedTools = tools;
 
+        // Reverse middleware control:
+        // OpenAIChatClient => ImageContentSanitizingChatClient => FunctionInvokingChatClient => TracingChatClient
         var chatClientBuilder = new ChatClientBuilder(_chatClient.AsIChatClient());
         if (_traceCollector != null)
         {
@@ -240,6 +242,7 @@ public sealed class AgentFactory
         {
             MaximumIterationsPerRequest = _config.MaxToolCallRounds
         });
+        chatClientBuilder.Use(innerClient => new ImageContentSanitizingChatClient(innerClient));
         var configuredChatClient = chatClientBuilder.Build();
 
         var options = new ChatClientAgentOptions
@@ -266,20 +269,23 @@ public sealed class AgentFactory
     }
 
     /// <summary>
-    /// Creates a tracing chat client for debugging and monitoring.
+    /// Creates a chat client with filtering tool call.
     /// </summary>
-    public IChatClient CreateTracingChatClient(TraceCollector? traceCollector = null)
+    public IChatClient CreateToolCallFilteringChatClient()
     {
+        // Reverse middleware control:
+        // OpenAIChatClient => ImageContentSanitizingChatClient => FunctionInvokingChatClient => TracingChatClient => ToolCallFilteringChatClient
         var chatClientBuilder = new ChatClientBuilder(_chatClient.AsIChatClient());
         chatClientBuilder.Use(innerClient => new ToolCallFilteringChatClient(innerClient));
-        if (traceCollector != null)
+        if (_traceCollector != null)
         {
-            chatClientBuilder.Use(innerClient => new TracingChatClient(innerClient, traceCollector));
+            chatClientBuilder.Use(innerClient => new TracingChatClient(innerClient, _traceCollector));
         }
         chatClientBuilder.Use(innerClient => new FunctionInvokingChatClient(innerClient)
         {
             MaximumIterationsPerRequest = _config.MaxToolCallRounds
         });
+        chatClientBuilder.Use(innerClient => new ImageContentSanitizingChatClient(innerClient));
         return chatClientBuilder.Build();
     }
 

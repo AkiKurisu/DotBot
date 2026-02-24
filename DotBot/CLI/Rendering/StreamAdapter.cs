@@ -108,7 +108,7 @@ public static partial class StreamAdapter
                     {
                         hasToolContent = true;
 
-                        var result = functionResult.Result?.ToString() ?? "(no output)";
+                        var result = Agents.ImageContentSanitizingChatClient.DescribeResult(functionResult.Result);
 
                         // Resolve icon, title, and args from the CallId mapping
                         string? icon = null;
