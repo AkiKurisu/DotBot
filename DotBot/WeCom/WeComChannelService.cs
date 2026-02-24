@@ -4,6 +4,7 @@ using DotBot.Agents;
 using DotBot.Configuration;
 using DotBot.Cron;
 using DotBot.DashBoard;
+using DotBot.Gateway;
 using DotBot.Heartbeat;
 using DotBot.Hosting;
 using DotBot.Mcp;
@@ -94,9 +95,10 @@ public sealed class WeComChannelService(
         var traceCollector = sp.GetService<TraceCollector>();
         var tokenUsageStore = sp.GetService<TokenUsageStore>();
 
+        var sessionGate = sp.GetRequiredService<SessionGate>();
         _adapter = new WeComChannelAdapter(
             agent, sessionStore, registry,
-            permissionService, wecomApprovalService,
+            permissionService, wecomApprovalService, sessionGate,
             heartbeatService: HeartbeatService,
             cronService: CronService,
             agentFactory: agentFactory,

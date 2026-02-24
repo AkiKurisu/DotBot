@@ -4,6 +4,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using DotBot.CLI;
 using DotBot.DashBoard;
+using DotBot.Gateway;
 using DotBot.Memory;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -15,7 +16,7 @@ namespace DotBot.Agents;
 /// Shared agent execution logic used across all channel modes (QQ, WeCom, CLI).
 /// Eliminates duplicated RunAgent local functions in Program.cs.
 /// </summary>
-public sealed class AgentRunner(AIAgent agent, SessionStore sessionStore, AgentFactory? agentFactory = null, TraceCollector? traceCollector = null)
+public sealed class AgentRunner(AIAgent agent, SessionStore sessionStore, AgentFactory? agentFactory = null, TraceCollector? traceCollector = null, SessionGate? sessionGate = null)
 {
     private readonly JsonSerializerOptions _jsonSerializerOptions = new()
     {
@@ -43,6 +44,22 @@ public sealed class AgentRunner(AIAgent agent, SessionStore sessionStore, AgentF
 
         AnsiConsole.MarkupLine(
             $"[grey][[{tag}]][/] Running: [dim]{Markup.Escape(prompt.Length > 120 ? prompt[..120] + "..." : prompt)}[/]");
+
+        IDisposable? gateLock = null;
+        try
+        {
+            if (sessionGate != null)
+                gateLock = await sessionGate.AcquireAsync(sessionKey);
+        }
+        catch (SessionGateOverflowException)
+        {
+            AnsiConsole.MarkupLine(
+                $"[grey][[{tag}]][/] [yellow]Request evicted for session {Markup.Escape(sessionKey)} (queue overflow)[/]");
+            return null;
+        }
+
+        try
+        {
 
         var session = await sessionStore.LoadOrCreateAsync(agent, sessionKey, CancellationToken.None);
         var sb = new StringBuilder();
@@ -172,5 +189,11 @@ public sealed class AgentRunner(AIAgent agent, SessionStore sessionStore, AgentF
         agentFactory?.TryConsolidateMemory(session, sessionKey);
 
         return response;
+
+        }
+        finally
+        {
+            gateLock?.Dispose();
+        }
     }
 }

@@ -1,6 +1,7 @@
 using DotBot.Configuration;
 using DotBot.Cron;
 using DotBot.DashBoard;
+using DotBot.Gateway;
 using DotBot.Localization;
 using DotBot.Mcp;
 using DotBot.Memory;
@@ -37,6 +38,7 @@ public static class ServiceRegistration
         services.AddSingleton<CronTools>(sp => new CronTools(sp.GetRequiredService<CronService>()));
 
         services.AddSingleton<McpClientManager>();
+        services.AddSingleton(new SessionGate(config.MaxSessionQueueSize));
 
         // Register configuration validation
         services.AddConfigurationValidation();

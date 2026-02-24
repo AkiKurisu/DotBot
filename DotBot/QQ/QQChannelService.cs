@@ -4,6 +4,7 @@ using DotBot.Agents;
 using DotBot.Configuration;
 using DotBot.Cron;
 using DotBot.DashBoard;
+using DotBot.Gateway;
 using DotBot.Heartbeat;
 using DotBot.Hosting;
 using DotBot.Mcp;
@@ -93,9 +94,10 @@ public sealed class QQChannelService(
         var traceCollector = sp.GetService<TraceCollector>();
         var tokenUsageStore = sp.GetService<TokenUsageStore>();
 
+        var sessionGate = sp.GetRequiredService<SessionGate>();
         _adapter = new QQChannelAdapter(
             qqClient, agent, sessionStore,
-            permissionService, qqApprovalService,
+            permissionService, sessionGate, qqApprovalService,
             heartbeatService: HeartbeatService,
             cronService: CronService,
             agentFactory: agentFactory,
