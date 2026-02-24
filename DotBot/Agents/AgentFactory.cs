@@ -231,6 +231,11 @@ public sealed class AgentFactory
         LastCreatedTools = tools;
 
         var chatClientBuilder = new ChatClientBuilder(_chatClient.AsIChatClient());
+        if (_traceCollector != null)
+        {
+            var tc = _traceCollector;
+            chatClientBuilder.Use(innerClient => new TracingChatClient(innerClient, tc));
+        }
         chatClientBuilder.Use(innerClient => new FunctionInvokingChatClient(innerClient)
         {
             MaximumIterationsPerRequest = _config.MaxToolCallRounds

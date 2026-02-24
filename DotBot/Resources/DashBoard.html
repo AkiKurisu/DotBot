@@ -831,6 +831,18 @@ function getSessionByKey(sessionKey) {
   return allSessions.find(s => s.sessionKey === sessionKey) || null;
 }
 
+function renderFinishReasonBadge(reason) {
+  if (!reason) return '';
+  const lc = reason.toLowerCase();
+  let cls;
+  if (lc === 'stop') cls = 'badge-success';
+  else if (lc === 'length') cls = 'badge-warning';
+  else if (lc === 'toolcalls' || lc === 'tool_calls') cls = 'badge-info';
+  else if (lc === 'contentfilter' || lc === 'content_filter') cls = 'badge-accent';
+  else cls = 'badge-info';
+  return `<span class="badge ${cls}" title="Finish reason">⏹ ${escapeHtml(reason)}</span>`;
+}
+
 function renderToolBadges(toolNames) {
   if (!toolNames || toolNames.length === 0) {
     return '<span style="color:var(--text-muted);font-size:12px">No tools recorded.</span>';
@@ -884,7 +896,7 @@ async function refreshDashboard() {
       <div class="session-card" onclick="viewSessionTraces('${escapeHtml(s.sessionKey)}')">
         <div class="session-main">
           <div class="session-info">
-            <div class="session-key">${escapeHtml(s.sessionKey)}</div>
+            <div class="session-key" style="display:flex;align-items:center;gap:8px">${escapeHtml(s.sessionKey)} ${renderFinishReasonBadge(s.lastFinishReason)}</div>
             <div class="session-meta">
               <span>Last active: ${formatRelative(s.lastActivityAt)}</span>
             </div>
@@ -930,7 +942,7 @@ async function refreshSessions() {
     <div class="session-card" onclick="viewSessionTraces('${escapeHtml(s.sessionKey)}')">
       <div class="session-main">
         <div class="session-info">
-          <div class="session-key">${escapeHtml(s.sessionKey)}</div>
+          <div class="session-key" style="display:flex;align-items:center;gap:8px">${escapeHtml(s.sessionKey)} ${renderFinishReasonBadge(s.lastFinishReason)}</div>
           <div class="session-meta">
             <span>Started: ${new Date(s.startedAt).toLocaleString()}</span>
             <span>Last: ${formatRelative(s.lastActivityAt)}</span>
@@ -964,7 +976,7 @@ async function viewSessionTraces(sessionKey) {
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
     </button>
     <div style="display:flex;flex-direction:column;gap:4px">
-      <div>Traces: <span style="color:var(--accent-light);font-family:var(--font-mono)">${escapeHtml(sessionKey)}</span></div>
+      <div style="display:flex;align-items:center;gap:8px">Traces: <span style="color:var(--accent-light);font-family:var(--font-mono)">${escapeHtml(sessionKey)}</span>${renderFinishReasonBadge(session?.lastFinishReason)}</div>
       <div style="font-size:12px;color:var(--text-muted)">System prompt: ${promptPreview}</div>
       <div style="font-size:12px;color:var(--text-muted)">Tools: ${toolCount}</div>
     </div>

@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
 using Microsoft.Extensions.AI;
@@ -79,11 +78,11 @@ public sealed class TracingChatClient(IChatClient innerClient, TraceCollector co
             collector.RecordResponse(
                 sessionKey,
                 responseText,
-                GetStringProperty(response, "ResponseId"),
-                GetStringProperty(response, "MessageId"),
-                GetStringProperty(response, "ModelId"),
-                GetStringProperty(response, "FinishReason"),
-                GetProperty(response, "AdditionalProperties"));
+                response.ResponseId,
+                null,
+                response.ModelId,
+                response.FinishReason.ToString(),
+                response.AdditionalProperties);
         }
 
         if (response.Usage != null)
@@ -184,33 +183,15 @@ public sealed class TracingChatClient(IChatClient innerClient, TraceCollector co
             collector.RecordResponse(
                 sessionKey,
                 responseBuffer.ToString(),
-                GetStringProperty(lastUpdate, "ResponseId"),
-                GetStringProperty(lastUpdate, "MessageId"),
-                GetStringProperty(lastUpdate, "ModelId"),
-                GetStringProperty(lastUpdate, "FinishReason"),
-                GetProperty(lastUpdate, "AdditionalProperties"));
+                lastUpdate?.ResponseId,
+                lastUpdate?.MessageId,
+                lastUpdate?.ModelId,
+                lastUpdate?.FinishReason?.ToString(),
+                lastUpdate?.AdditionalProperties);
         }
 
         if (inputTokens > 0 || outputTokens > 0)
             collector.RecordTokenUsage(sessionKey, inputTokens, outputTokens);
-    }
-
-    private static object? GetProperty(object? instance, string propertyName)
-    {
-        if (instance == null)
-            return null;
-
-        var property = instance
-            .GetType()
-            .GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
-
-        return property?.GetValue(instance);
-    }
-
-    private static string? GetStringProperty(object? instance, string propertyName)
-    {
-        var value = GetProperty(instance, propertyName);
-        return value?.ToString();
     }
 
     private void RecordRequestIfFirst(string sessionKey, IList<ChatMessage> messages, SessionCallState state)
