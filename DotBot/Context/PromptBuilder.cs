@@ -58,7 +58,7 @@ public sealed class PromptBuilder(MemoryStore memoryStore, SkillsLoader skillsLo
                 parts.Add($"# Active Skills\n\n{alwaysContent}");
         }
 
-        // 2. Available skills: show summary (agent uses read_file to load full content)
+        // 2. Available skills: show summary (agent uses ReadFile to load full content)
         var skillsSummary = skillsLoader.BuildSkillsSummary();
         if (!string.IsNullOrWhiteSpace(skillsSummary))
         {
@@ -66,7 +66,7 @@ public sealed class PromptBuilder(MemoryStore memoryStore, SkillsLoader skillsLo
 $"""
 # Skills
 
-The following skills extend your capabilities. To use a skill, read its SKILL.md file using the read_file tool.
+The following skills extend your capabilities. To use a skill, read its SKILL.md file using the ReadFile tool.
 
 {skillsSummary}
 """
@@ -137,15 +137,9 @@ This is your working directory where you perform file and shell operations.
 ## DotBot Directory
 Your data directory is at: {{dotBot}}
 This contains:
-- Long-term memory: {{dotBot}}/memory/MEMORY.md (always loaded into context)
-- Event history log: {{dotBot}}/memory/HISTORY.md (use shell grep to search)
+- Memory: {{dotBot}}/memory/ (see Memory skill for details)
 - Custom skills: {{dotBot}}/skills/{skill-name}/SKILL.md
 - Configuration: {{dotBot}}/appsettings.json
-
-## Memory Instructions
-- When you learn something important (facts, preferences, project context), write it to {{dotBot}}/memory/MEMORY.md.
-- To recall past events or decisions, search the history log with the shell tool:
-  grep -i "keyword" "{{dotBot}}/memory/HISTORY.md"
 """;
     }
 }
