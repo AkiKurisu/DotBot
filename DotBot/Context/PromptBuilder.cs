@@ -1,7 +1,5 @@
 using DotBot.Memory;
-using DotBot.QQ;
 using DotBot.Skills;
-using DotBot.WeCom;
 
 namespace DotBot.Context;
 
@@ -75,65 +73,14 @@ The following skills extend your capabilities. To use a skill, read its SKILL.md
                 );
         }
 
-        var qqChat = QQChatContextScope.Current;
-        if (qqChat != null)
+        foreach (var provider in ChatContextRegistry.All)
         {
-            parts.Add(BuildQQChatContext(qqChat));
-        }
-
-        var wecomChat = WeComChatContextScope.Current;
-        if (wecomChat != null)
-        {
-            parts.Add(BuildWeComChatContext(wecomChat));
+            var section = provider.GetSystemPromptSection();
+            if (!string.IsNullOrWhiteSpace(section))
+                parts.Add(section);
         }
 
         return string.Join("\n\n---\n\n", parts);
-    }
-
-    private static string BuildWeComChatContext(WeComChatContext ctx)
-    {
-        return
-$"""
-# WeCom Chat Context
-
-You are currently in **WeCom Bot** mode.
-- Chat ID: {ctx.ChatId}
-- Sender User ID: {ctx.UserId}
-- Sender name: {ctx.UserName}
-
-You can use WeComSendVoice / WeComSendFile to send voice or file messages in the current chat.
-""";
-    }
-
-    private static string BuildQQChatContext(QQChatContext ctx)
-    {
-        if (ctx.IsGroupMessage)
-        {
-            return
-$"""                
-# QQ Chat Context
-
-You are currently in **QQ Bot** mode.
-- Chat type: Group
-- Group ID: {ctx.GroupId}
-- Sender QQ: {ctx.UserId}
-- Sender name: {ctx.SenderName}
-
-When using QQ tools (voice, video, file), use group_id = {ctx.GroupId} for group operations.
-""";
-        }
-
-        return
-$"""
-# QQ Chat Context
-
-You are currently in **QQ Bot** mode.
-- Chat type: Private
-- Sender QQ: {ctx.UserId}
-- Sender name: {ctx.SenderName}
-
-When using QQ tools (voice, video, file), use user_id = {ctx.UserId} for private operations.
-""";
     }
 
     /// <summary>
@@ -171,7 +118,6 @@ When using QQ tools (voice, video, file), use user_id = {ctx.UserId} for private
 
     private string GetIdentity()
     {
-        var now = DateTime.Now.ToString("yyyy-MM-dd HH:mm (dddd)");
         var workspace = _workspacePath;
         var dotBot = _cortexBotPath;
 
@@ -183,9 +129,6 @@ You are DotBot, a helpful AI assistant. You have access to tools that allow you 
 - Read, write, and edit files
 - Execute shell commands
 - Complete user tasks efficiently
-
-## Current Time
-{{now}}
 
 ## Workspace
 Your workspace is at: {{workspace}}

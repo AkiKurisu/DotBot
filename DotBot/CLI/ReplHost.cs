@@ -2,6 +2,7 @@ using System.Text;
 using DotBot.Agents;
 using DotBot.CLI.Rendering;
 using DotBot.Configuration;
+using DotBot.Context;
 using DotBot.Cron;
 using DotBot.DashBoard;
 using DotBot.Heartbeat;
@@ -587,7 +588,7 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
                 long inputTokens = 0, outputTokens = 0;
 
                 // Get streaming updates from agent
-                var stream = agent.RunStreamingAsync(userInput, session, cancellationToken: cancellationToken);
+                var stream = agent.RunStreamingAsync(RuntimeContextBuilder.AppendTo(userInput), session, cancellationToken: cancellationToken);
 
                 // Adapt stream to render events
                 var events = StreamAdapter.AdaptAsync(WrapStream(stream), cancellationToken, tokenTracker);

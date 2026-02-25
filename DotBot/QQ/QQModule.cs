@@ -1,5 +1,6 @@
 using DotBot.Abstractions;
 using DotBot.Configuration;
+using DotBot.Context;
 using DotBot.Modules;
 using DotBot.QQ.Factories;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,6 +26,8 @@ public sealed partial class QQModule : ModuleBase
     /// <inheritdoc />
     public override void ConfigureServices(IServiceCollection services, ModuleContext context)
     {
+        ChatContextRegistry.Register(new QQChatContextProvider());
+
         var config = context.Config.QQBot;
 
         // Register QQBotClient

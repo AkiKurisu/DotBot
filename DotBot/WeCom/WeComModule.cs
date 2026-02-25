@@ -1,5 +1,6 @@
 using DotBot.Abstractions;
 using DotBot.Configuration;
+using DotBot.Context;
 using DotBot.WeCom;
 using DotBot.WeCom.Factories;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,6 +26,8 @@ public sealed partial class WeComModule : ModuleBase
     /// <inheritdoc />
     public override void ConfigureServices(IServiceCollection services, ModuleContext context)
     {
+        ChatContextRegistry.Register(new WeComChatContextProvider());
+
         var config = context.Config.WeComBot;
 
         // Register WeComBotRegistry
