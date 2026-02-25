@@ -8,7 +8,7 @@
 
 # DotBot
 
-**DotBot** (.Bot) is a lightweight OpenClaw written in C# that is secure, reliable, and ready to use out of the box.
+**DotBot** (.Bot) is a lightweight OpenClaw for .Net that is secure, reliable, and ready to use out of the box.
 
 ![banner](./Documentation/images/banner.png)
 

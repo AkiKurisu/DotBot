@@ -8,7 +8,7 @@
 
 # DotBot
 
-**DotBot** (.Bot) 是一个 C# 编写的轻量级 OpenClaw，安全可靠，开箱即用。
+**DotBot** (.Bot) 是一个轻量级的 .Net 版 OpenClaw，安全可靠，开箱即用。
 
 ![banner](./Documentation/images/banner.png)
 
