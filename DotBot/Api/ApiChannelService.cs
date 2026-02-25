@@ -1,5 +1,7 @@
 using System.ClientModel;
 using System.Diagnostics.CodeAnalysis;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using DotBot.Abstractions;
 using DotBot.Agents;
@@ -181,8 +183,7 @@ public sealed class ApiChannelService : IChannelService
                 var path = context.Request.Path.Value ?? "";
                 if (path.EndsWith("/chat/completions", StringComparison.OrdinalIgnoreCase))
                 {
-                    var sessionKey = context.Request.Headers["X-Session-Key"].FirstOrDefault()
-                                     ?? $"api:{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid().ToString("N")[..8]}";
+                    var sessionKey = await ResolveSessionKeyAsync(context);
                     TracingChatClient.CurrentSessionKey = sessionKey;
                     TracingChatClient.ResetCallState(sessionKey);
 
@@ -263,6 +264,63 @@ public sealed class ApiChannelService : IChannelService
     {
         // API channel has no proactive message delivery capability
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Resolves a stable session key for the current request.
+    /// Priority: X-Session-Key header → 'user' field in body → SHA-256 fingerprint of
+    /// first message content → random fallback.
+    /// Grouping by the first message fingerprint ensures that all turns of the same
+    /// Chatbox conversation (which always starts with the same first message) are
+    /// recorded under a single Dashboard session.
+    /// </summary>
+    private static async Task<string> ResolveSessionKeyAsync(HttpContext context)
+    {
+        var fromHeader = context.Request.Headers["X-Session-Key"].FirstOrDefault();
+        if (!string.IsNullOrEmpty(fromHeader))
+            return fromHeader;
+
+        context.Request.EnableBuffering();
+        try
+        {
+            using var reader = new StreamReader(context.Request.Body, leaveOpen: true);
+            var body = await reader.ReadToEndAsync();
+            context.Request.Body.Position = 0;
+
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+
+            // Use the 'user' field if the client supplies one (e.g. a persistent user ID).
+            if (root.TryGetProperty("user", out var userProp) &&
+                userProp.ValueKind == JsonValueKind.String &&
+                !string.IsNullOrWhiteSpace(userProp.GetString()))
+            {
+                return $"api:{userProp.GetString()}";
+            }
+
+            // Fingerprint from the first message in the conversation.
+            // Chatbox always sends the full history, so messages[0] is identical across
+            // all turns of the same conversation — making it a stable session identifier.
+            if (root.TryGetProperty("messages", out var messages) &&
+                messages.ValueKind == JsonValueKind.Array &&
+                messages.GetArrayLength() > 0)
+            {
+                var first = messages[0];
+                var content = first.TryGetProperty("content", out var c) ? c.GetString() ?? "" : "";
+                if (!string.IsNullOrEmpty(content))
+                {
+                    var hash = Convert.ToHexString(
+                        SHA256.HashData(Encoding.UTF8.GetBytes(content)))[..12].ToLowerInvariant();
+                    return $"api:{hash}";
+                }
+            }
+        }
+        catch
+        {
+            // Ignore parse errors and fall through to random key.
+        }
+
+        return $"api:{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid().ToString("N")[..8]}";
     }
 
     private void MapAdditionalRoutes(IEndpointRouteBuilder endpoints, AgentRunner runner)
