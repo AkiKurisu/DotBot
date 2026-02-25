@@ -4,6 +4,7 @@ using DotBot.Agents;
 using DotBot.CLI;
 using DotBot.Commands.ChannelAdapters;
 using DotBot.Commands.Core;
+using DotBot.Context;
 using DotBot.Cron;
 using DotBot.DashBoard;
 using DotBot.Gateway;
@@ -157,7 +158,7 @@ public sealed class WeComChannelAdapter : IAsyncDisposable
             TracingChatClient.ResetCallState(sessionId);
             try
             {
-                await foreach (var update in _agent.RunStreamingAsync(plainText, session))
+                await foreach (var update in _agent.RunStreamingAsync(RuntimeContextBuilder.AppendTo(plainText), session))
                 {
                     foreach (var content in update.Contents)
                     {

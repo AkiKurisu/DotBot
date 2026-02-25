@@ -116,8 +116,6 @@ $"""
 You are currently in **QQ Bot** mode.
 - Chat type: Group
 - Group ID: {ctx.GroupId}
-- Sender QQ: {ctx.UserId}
-- Sender name: {ctx.SenderName}
 
 When using QQ tools (voice, video, file), use group_id = {ctx.GroupId} for group operations.
 """;
@@ -171,7 +169,6 @@ When using QQ tools (voice, video, file), use user_id = {ctx.UserId} for private
 
     private string GetIdentity()
     {
-        var now = DateTime.Now.ToString("yyyy-MM-dd HH:mm (dddd)");
         var workspace = _workspacePath;
         var dotBot = _cortexBotPath;
 
@@ -183,9 +180,6 @@ You are DotBot, a helpful AI assistant. You have access to tools that allow you 
 - Read, write, and edit files
 - Execute shell commands
 - Complete user tasks efficiently
-
-## Current Time
-{{now}}
 
 ## Workspace
 Your workspace is at: {{workspace}}

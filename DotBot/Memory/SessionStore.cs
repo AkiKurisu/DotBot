@@ -54,8 +54,11 @@ public sealed class SessionStore
         return await agent.CreateSessionAsync(cancellationToken);
     }
 
+    // Tool result content is truncated to this length to reduce storage while preserving structure.
+    private const int ToolResultMaxChars = 500;
+
     /// <summary>
-    /// Save a session to disk, filtering out tool-related messages to reduce storage.
+    /// Save a session to disk, compacting tool result content to reduce storage.
     /// </summary>
     public async Task SaveAsync(AIAgent agent, AgentSession session, string sessionId, CancellationToken cancellationToken = default)
     {
@@ -68,8 +71,10 @@ public sealed class SessionStore
     }
 
     /// <summary>
-    /// Remove tool messages and function call contents from the session's chat history.
-    /// Operates directly on the ChatClientAgentSession's InMemoryChatHistoryProvider.
+    /// Truncates tool result content in the session's chat history to reduce storage.
+    /// Tool calls on assistant messages are preserved so the model retains context
+    /// about what actions were taken. Only the (potentially large) result payloads
+    /// are truncated, keeping the conversation structure valid for LLM replay.
     /// </summary>
     private static void CompactSession(AgentSession session)
     {
@@ -77,28 +82,15 @@ public sealed class SessionStore
         if (chatHistory is not InMemoryChatHistoryProvider memoryProvider)
             return;
 
-        for (int i = memoryProvider.Count - 1; i >= 0; i--)
+        foreach (var msg in memoryProvider)
         {
-            var msg = memoryProvider[i];
-
-            if (msg.Role == ChatRole.Tool)
-            {
-                memoryProvider.RemoveAt(i);
+            if (msg.Role != ChatRole.Tool)
                 continue;
-            }
 
-            if (msg.Role == ChatRole.Assistant)
+            foreach (var content in msg.Contents)
             {
-                for (int j = msg.Contents.Count - 1; j >= 0; j--)
-                {
-                    if (msg.Contents[j] is FunctionCallContent)
-                        msg.Contents.RemoveAt(j);
-                }
-
-                if (msg.Contents.Count == 0)
-                {
-                    memoryProvider.RemoveAt(i);
-                }
+                if (content is TextContent textContent && textContent.Text?.Length > ToolResultMaxChars)
+                    textContent.Text = textContent.Text[..ToolResultMaxChars] + "\n... (truncated)";
             }
         }
     }

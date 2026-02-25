@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using DotBot.CLI;
+using DotBot.Context;
 using DotBot.DashBoard;
 using DotBot.Gateway;
 using DotBot.Memory;
@@ -22,6 +23,9 @@ public sealed class AgentRunner(AIAgent agent, SessionStore sessionStore, AgentF
         WriteIndented = false,
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
+
+    private static string AppendRuntimeContext(string prompt) =>
+        RuntimeContextBuilder.AppendTo(prompt);
     
     /// <summary>
     /// Run agent with a prompt, manage session lifecycle, stream output, and log results.
@@ -40,6 +44,8 @@ public sealed class AgentRunner(AIAgent agent, SessionStore sessionStore, AgentF
                      $"Do NOT treat this as a user conversation or create a new scheduled task.\n\n" +
                      $"Task: {prompt}";
         }
+
+        prompt = AppendRuntimeContext(prompt);
 
         AnsiConsole.MarkupLine(
             $"[grey][[{tag}]][/] Running: [dim]{Markup.Escape(prompt.Length > 120 ? prompt[..120] + "..." : prompt)}[/]");
