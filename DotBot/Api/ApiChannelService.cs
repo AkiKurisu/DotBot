@@ -1,9 +1,10 @@
 using System.ClientModel;
 using System.Diagnostics.CodeAnalysis;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using DotBot.Abstractions;
 using DotBot.Agents;
-using DotBot.CLI;
 using DotBot.Configuration;
 using DotBot.Context;
 using DotBot.Cron;
@@ -34,19 +35,19 @@ namespace DotBot.Api;
 /// Gateway channel service for OpenAI-compatible HTTP API.
 /// Manages the ASP.NET Core web server and agent lifecycle as part of a multi-channel gateway.
 /// </summary>
-public sealed class ApiChannelService : IChannelService
+public sealed class ApiChannelService(
+    IServiceProvider sp,
+    AppConfig config,
+    DotBotPaths paths,
+    SessionStore sessionStore,
+    MemoryStore memoryStore,
+    SkillsLoader skillsLoader,
+    PathBlacklist blacklist,
+    McpClientManager mcpClientManager,
+    ApiApprovalService approvalService,
+    ModuleRegistry moduleRegistry)
+    : IChannelService
 {
-    private readonly IServiceProvider _sp;
-    private readonly AppConfig _config;
-    private readonly DotBotPaths _paths;
-    private readonly SessionStore _sessionStore;
-    private readonly MemoryStore _memoryStore;
-    private readonly SkillsLoader _skillsLoader;
-    private readonly PathBlacklist _blacklist;
-    private readonly McpClientManager _mcpClientManager;
-    private readonly ApiApprovalService _approvalService;
-    private readonly ModuleRegistry _moduleRegistry;
-
     private WebApplication? _webApp;
     private AgentFactory? _agentFactory;
 
@@ -70,57 +71,33 @@ public sealed class ApiChannelService : IChannelService
     /// </summary>
     public Action<WebApplication>? OnConfigureApp { get; set; }
 
-    public ApiChannelService(
-        IServiceProvider sp,
-        AppConfig config,
-        DotBotPaths paths,
-        SessionStore sessionStore,
-        MemoryStore memoryStore,
-        SkillsLoader skillsLoader,
-        PathBlacklist blacklist,
-        McpClientManager mcpClientManager,
-        ApiApprovalService approvalService,
-        ModuleRegistry moduleRegistry)
-    {
-        _sp = sp;
-        _config = config;
-        _paths = paths;
-        _sessionStore = sessionStore;
-        _memoryStore = memoryStore;
-        _skillsLoader = skillsLoader;
-        _blacklist = blacklist;
-        _mcpClientManager = mcpClientManager;
-        _approvalService = approvalService;
-        _moduleRegistry = moduleRegistry;
-    }
-
     private AgentFactory BuildAgentFactory()
     {
-        var cronTools = _sp.GetService<CronTools>();
-        var traceCollector = _sp.GetService<TraceCollector>();
+        var cronTools = sp.GetService<CronTools>();
+        var traceCollector = sp.GetService<TraceCollector>();
 
         // Collect tool providers from modules
-        var toolProviders = ToolProviderCollector.Collect(_moduleRegistry, _config);
+        var toolProviders = ToolProviderCollector.Collect(moduleRegistry, config);
 
         return new AgentFactory(
-            _paths.BotPath, _paths.WorkspacePath, _config,
-            _memoryStore, _skillsLoader, _approvalService, _blacklist,
+            paths.BotPath, paths.WorkspacePath, config,
+            memoryStore, skillsLoader, approvalService, blacklist,
             toolProviders: toolProviders,
             toolProviderContext: new ToolProviderContext
             {
-                Config = _config,
+                Config = config,
                 ChatClient = new OpenAIClient(
-                    new ApiKeyCredential(_config.ApiKey),
-                    new OpenAIClientOptions { Endpoint = new Uri(_config.EndPoint) })
-                    .GetChatClient(_config.Model),
-                WorkspacePath = _paths.WorkspacePath,
-                BotPath = _paths.BotPath,
-                MemoryStore = _memoryStore,
-                SkillsLoader = _skillsLoader,
-                ApprovalService = _approvalService,
-                PathBlacklist = _blacklist,
+                    new ApiKeyCredential(config.ApiKey),
+                    new OpenAIClientOptions { Endpoint = new Uri(config.EndPoint) })
+                    .GetChatClient(config.Model),
+                WorkspacePath = paths.WorkspacePath,
+                BotPath = paths.BotPath,
+                MemoryStore = memoryStore,
+                SkillsLoader = skillsLoader,
+                ApprovalService = approvalService,
+                PathBlacklist = blacklist,
                 CronTools = cronTools,
-                McpClientManager = _mcpClientManager.Tools.Count > 0 ? _mcpClientManager : null,
+                McpClientManager = mcpClientManager.Tools.Count > 0 ? mcpClientManager : null,
                 TraceCollector = traceCollector
             },
             traceCollector: traceCollector);
@@ -129,7 +106,7 @@ public sealed class ApiChannelService : IChannelService
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         _agentFactory = BuildAgentFactory();
-        var traceCollector = _sp.GetService<TraceCollector>();
+        var traceCollector = sp.GetService<TraceCollector>();
 
         var tools = _agentFactory.CreateDefaultTools();
 
@@ -140,11 +117,12 @@ public sealed class ApiChannelService : IChannelService
             "dotbot",
             _agentFactory.CreateToolCallFilteringChatClient(),
             CreateApiAgentOptions(tools, traceCollector))
-            .WithAITools(tools.ToArray());
+            .WithAITools(tools.ToArray())
+            .WithInMemorySessionStore();
 
         _webApp = builder.Build();
 
-        if (!string.IsNullOrEmpty(_config.Api.ApiKey))
+        if (!string.IsNullOrEmpty(config.Api.ApiKey))
         {
             _webApp.Use(async (context, next) =>
             {
@@ -160,7 +138,7 @@ public sealed class ApiChannelService : IChannelService
 
                     var authHeader = context.Request.Headers.Authorization.ToString();
                     if (!authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) ||
-                        authHeader["Bearer ".Length..].Trim() != _config.Api.ApiKey)
+                        authHeader["Bearer ".Length..].Trim() != config.Api.ApiKey)
                     {
                         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                         await context.Response.WriteAsJsonAsync(new { error = "unauthorized" },
@@ -174,15 +152,14 @@ public sealed class ApiChannelService : IChannelService
 
         if (traceCollector != null)
         {
-            var capturedTraceStore = _sp.GetService<TraceStore>();
-            var capturedTokenUsageStore = _sp.GetService<TokenUsageStore>();
+            var capturedTraceStore = sp.GetService<TraceStore>();
+            var capturedTokenUsageStore = sp.GetService<TokenUsageStore>();
             _webApp.Use(async (context, next) =>
             {
                 var path = context.Request.Path.Value ?? "";
                 if (path.EndsWith("/chat/completions", StringComparison.OrdinalIgnoreCase))
                 {
-                    var sessionKey = context.Request.Headers["X-Session-Key"].FirstOrDefault()
-                                     ?? $"api:{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid().ToString("N")[..8]}";
+                    var sessionKey = await ResolveSessionKeyAsync(context);
                     TracingChatClient.CurrentSessionKey = sessionKey;
                     TracingChatClient.ResetCallState(sessionKey);
 
@@ -228,18 +205,18 @@ public sealed class ApiChannelService : IChannelService
         _webApp.MapOpenAIChatCompletions(agentBuilder);
 
         var agent = _agentFactory.CreateAgentWithTools(tools);
-        var sessionGate = _sp.GetRequiredService<SessionGate>();
-        var runner = new AgentRunner(agent, _sessionStore, _agentFactory, traceCollector, sessionGate);
+        var sessionGate = sp.GetRequiredService<SessionGate>();
+        var runner = new AgentRunner(agent, sessionStore, _agentFactory, traceCollector, sessionGate);
 
         MapAdditionalRoutes(_webApp, runner);
 
         // Allow GatewayHost to inject additional routes (e.g. dashboard) before the app starts.
         OnConfigureApp?.Invoke(_webApp);
 
-        var url = $"http://{_config.Api.Host}:{_config.Api.Port}";
+        var url = $"http://{config.Api.Host}:{config.Api.Port}";
         AnsiConsole.MarkupLine($"[green][[Gateway]][/] API listening on {Markup.Escape(url)}");
 
-        var approvalMode = ApiApprovalService.ParseMode(_config.Api.ApprovalMode, _config.Api.AutoApprove);
+        var approvalMode = ApiApprovalService.ParseMode(config.Api.ApprovalMode, config.Api.AutoApprove);
         AnsiConsole.MarkupLine(
             $"[grey]  Approval mode: {approvalMode.ToString().ToLowerInvariant()}[/]");
 
@@ -265,6 +242,63 @@ public sealed class ApiChannelService : IChannelService
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Resolves a stable session key for the current request.
+    /// Priority: X-Session-Key header → 'user' field in body → SHA-256 fingerprint of
+    /// first message content → random fallback.
+    /// Grouping by the first message fingerprint ensures that all turns of the same
+    /// conversation (which always starts with the same first message) are recorded
+    /// under a single Dashboard session.
+    /// </summary>
+    private static async Task<string> ResolveSessionKeyAsync(HttpContext context)
+    {
+        var fromHeader = context.Request.Headers["X-Session-Key"].FirstOrDefault();
+        if (!string.IsNullOrEmpty(fromHeader))
+            return fromHeader;
+
+        context.Request.EnableBuffering();
+        try
+        {
+            using var reader = new StreamReader(context.Request.Body, leaveOpen: true);
+            var body = await reader.ReadToEndAsync();
+            context.Request.Body.Position = 0;
+
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+
+            // Use the 'user' field if the client supplies one (e.g. a persistent user ID).
+            if (root.TryGetProperty("user", out var userProp) &&
+                userProp.ValueKind == JsonValueKind.String &&
+                !string.IsNullOrWhiteSpace(userProp.GetString()))
+            {
+                return $"api:{userProp.GetString()}";
+            }
+
+            // Fingerprint from the first message in the conversation.
+            // Chatbox always sends the full history, so messages[0] is identical across
+            // all turns of the same conversation — making it a stable session identifier.
+            if (root.TryGetProperty("messages", out var messages) &&
+                messages.ValueKind == JsonValueKind.Array &&
+                messages.GetArrayLength() > 0)
+            {
+                var first = messages[0];
+                var content = first.TryGetProperty("content", out var c) ? c.GetString() ?? "" : "";
+                if (!string.IsNullOrEmpty(content))
+                {
+                    var hash = Convert.ToHexString(
+                        SHA256.HashData(Encoding.UTF8.GetBytes(content)))[..12].ToLowerInvariant();
+                    return $"api:{hash}";
+                }
+            }
+        }
+        catch
+        {
+            // Ignore parse errors and fall through to random key.
+        }
+
+        return $"api:{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid().ToString("N")[..8]}";
+    }
+
     private void MapAdditionalRoutes(IEndpointRouteBuilder endpoints, AgentRunner runner)
     {
         endpoints.MapGet("/v1/health", () => Results.Json(new
@@ -272,48 +306,9 @@ public sealed class ApiChannelService : IChannelService
             status = "ok",
             version = "1.0.0",
             mode = "gateway-api",
-            model = _config.Model,
+            model = config.Model,
             protocol = "openai-compatible"
         }));
-
-        endpoints.MapGet("/v1/tools", (HttpContext context) =>
-        {
-            if (!Authenticate(context))
-                return Results.Json(new { error = "unauthorized" },
-                    statusCode: StatusCodes.Status401Unauthorized);
-
-            var toolList = (_agentFactory?.LastCreatedTools ?? []).Select(t => new
-            {
-                name = t.Name,
-                icon = ToolIconRegistry.GetToolIcon(t.Name)
-            }).ToList();
-
-            return Results.Json(new { tools = toolList });
-        });
-
-        endpoints.MapGet("/v1/sessions", (HttpContext context) =>
-        {
-            if (!Authenticate(context))
-                return Results.Json(new { error = "unauthorized" },
-                    statusCode: StatusCodes.Status401Unauthorized);
-
-            return Results.Json(new { sessions = _sessionStore.ListSessions() });
-        });
-
-        endpoints.MapDelete("/v1/sessions/{id}", (HttpContext context, string id) =>
-        {
-            if (!Authenticate(context))
-                return Results.Json(new { error = "unauthorized" },
-                    statusCode: StatusCodes.Status401Unauthorized);
-
-            var deleted = _sessionStore.Delete(id);
-            if (deleted) _agentFactory?.RemoveTokenTracker(id);
-
-            return deleted
-                ? Results.Json(new { deleted = true, id })
-                : Results.Json(new { deleted = false, id },
-                    statusCode: StatusCodes.Status404NotFound);
-        });
 
         endpoints.MapGet("/v1/approvals", (HttpContext context) =>
         {
@@ -321,7 +316,7 @@ public sealed class ApiChannelService : IChannelService
                 return Results.Json(new { error = "unauthorized" },
                     statusCode: StatusCodes.Status401Unauthorized);
 
-            var list = _approvalService.PendingApprovals.Select(a => new
+            var list = approvalService.PendingApprovals.Select(a => new
             {
                 id = a.Id,
                 type = a.Type,
@@ -355,7 +350,7 @@ public sealed class ApiChannelService : IChannelService
                 return Results.Json(new { error = "missing request body" },
                     statusCode: StatusCodes.Status400BadRequest);
 
-            var resolved = _approvalService.Resolve(id, body.Approved);
+            var resolved = approvalService.Resolve(id, body.Approved);
             if (!resolved)
                 return Results.Json(
                     new { error = "approval not found or already resolved" },
@@ -372,16 +367,16 @@ public sealed class ApiChannelService : IChannelService
         {
             AIContextProviderFactory = (_, _) => new ValueTask<AIContextProvider>(
                 new MemoryContextProvider(
-                    _memoryStore, _skillsLoader,
-                    _paths.BotPath, _paths.WorkspacePath,
-                    _config.SystemInstructions, traceCollector,
+                    memoryStore, skillsLoader,
+                    paths.BotPath, paths.WorkspacePath,
+                    config.SystemInstructions, traceCollector,
                     () => tools.Select(t => t.Name).ToArray()))
         };
     }
 
     private bool Authenticate(HttpContext context)
     {
-        var apiKey = _config.Api.ApiKey;
+        var apiKey = config.Api.ApiKey;
         if (string.IsNullOrEmpty(apiKey))
             return true;
 
