@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using DotBot.Abstractions;
 using DotBot.Agents;
 using DotBot.CLI;
 using DotBot.Commands.ChannelAdapters;
@@ -133,105 +134,112 @@ public sealed class WeComChannelAdapter : IAsyncDisposable
 
         try
         {
-            using var _ = ApprovalContextScope.Set(approvalContext);
-            using var __ = WeComPusherScope.Set(pusher);
-            using var ___ = WeComChatContextScope.Set(new WeComChatContext
+            using (ApprovalContextScope.Set(approvalContext))
+            using (WeComPusherScope.Set(pusher))
+            using (WeComChatContextScope.Set(new WeComChatContext
+                   {
+                       ChatId = chatId,
+                       UserId = from.UserId,
+                       UserName = from.Name
+                   }))
+            using (ChannelSessionScope.Set(new ChannelSessionInfo
+                   {
+                       Channel = "wecom",
+                       UserId = from.UserId,
+                       GroupId = chatId,
+                       DefaultDeliveryTarget = chatId
+                   }))
+            using (await _sessionGate.AcquireAsync(sessionId))
             {
-                ChatId = chatId,
-                UserId = from.UserId,
-                UserName = from.Name
-            });
-            using var ____ = await _sessionGate.AcquireAsync(sessionId);
+                var session = await _sessionStore.LoadOrCreateAsync(_agent, sessionId, CancellationToken.None);
 
-            var session = await _sessionStore.LoadOrCreateAsync(_agent, sessionId, CancellationToken.None);
+                var textBuffer = new StringBuilder();
+                long inputTokens = 0, outputTokens = 0, totalTokens = 0;
+                var tokenTracker = _agentFactory?.GetOrCreateTokenTracker(sessionId);
 
-            var textBuffer = new StringBuilder();
-            long inputTokens = 0, outputTokens = 0, totalTokens = 0;
-            var tokenTracker = _agentFactory?.GetOrCreateTokenTracker(sessionId);
+                _traceCollector?.RecordSessionMetadata(
+                    sessionId,
+                    null,
+                    _agentFactory?.LastCreatedTools?.Select(t => t.Name));
 
-            _traceCollector?.RecordSessionMetadata(
-                sessionId,
-                null,
-                _agentFactory?.LastCreatedTools?.Select(t => t.Name));
-
-            TracingChatClient.CurrentSessionKey = sessionId;
-            TracingChatClient.ResetCallState(sessionId);
-            try
-            {
-                await foreach (var update in _agent.RunStreamingAsync(RuntimeContextBuilder.AppendTo(plainText), session))
-                {
-                    foreach (var content in update.Contents)
-                    {
-                        switch (content)
-                        {
-                            case FunctionCallContent functionCall:
-                                await FlushTextBufferAsync(pusher, textBuffer);
-
-                                var icon = ToolIconRegistry.GetToolIcon(functionCall.Name);
-                                var toolNotice = $"{icon} 正在调用: {functionCall.Name}...";
-                                await pusher.PushTextAsync(toolNotice);
-                                LogOutgoing(chatId, toolNotice);
-                                LogToolCall(functionCall.Name, functionCall.Arguments);
-                                break;
-
-                            case FunctionResultContent fr:
-                                LogToolResult(Agents.ImageContentSanitizingChatClient.DescribeResult(fr.Result));
-                                break;
-
-                            case UsageContent usage:
-                                if (usage.Details.InputTokenCount.HasValue)
-                                    inputTokens = usage.Details.InputTokenCount.Value;
-                                if (usage.Details.OutputTokenCount.HasValue)
-                                    outputTokens = usage.Details.OutputTokenCount.Value;
-                                if (usage.Details.TotalTokenCount.HasValue)
-                                    totalTokens = usage.Details.TotalTokenCount.Value;
-                                break;
-                        }
-                    }
-
-                    if (!string.IsNullOrEmpty(update.Text))
-                        textBuffer.Append(update.Text);
-                }
-            }
-            finally
-            {
+                TracingChatClient.CurrentSessionKey = sessionId;
                 TracingChatClient.ResetCallState(sessionId);
-                TracingChatClient.CurrentSessionKey = null;
-            }
-
-            if (totalTokens == 0 && (inputTokens > 0 || outputTokens > 0))
-                totalTokens = inputTokens + outputTokens;
-
-            if (totalTokens > 0)
-            {
-                tokenTracker?.Update(inputTokens, outputTokens);
-                var displayInput = tokenTracker?.LastInputTokens ?? inputTokens;
-                var displayOutput = tokenTracker?.TotalOutputTokens ?? outputTokens;
-                textBuffer.Append($"\n\n[↑ {displayInput} input ↓ {displayOutput} output]");
-            }
-
-            await FlushTextBufferAsync(pusher, textBuffer);
-
-            if (totalTokens > 0)
-            {
-                _tokenUsageStore?.Record(new TokenUsageRecord
+                try
                 {
-                    Source = TokenUsageSource.WeCom,
-                    UserId = from.UserId,
-                    DisplayName = from.Name,
-                    InputTokens = inputTokens,
-                    OutputTokens = outputTokens
-                });
+                    await foreach (var update in _agent.RunStreamingAsync(RuntimeContextBuilder.AppendTo(plainText), session))
+                    {
+                        foreach (var content in update.Contents)
+                        {
+                            switch (content)
+                            {
+                                case FunctionCallContent functionCall:
+                                    await FlushTextBufferAsync(pusher, textBuffer);
+
+                                    var icon = ToolIconRegistry.GetToolIcon(functionCall.Name);
+                                    var toolNotice = $"{icon} 正在调用: {functionCall.Name}...";
+                                    await pusher.PushTextAsync(toolNotice);
+                                    LogOutgoing(chatId, toolNotice);
+                                    LogToolCall(functionCall.Name, functionCall.Arguments);
+                                    break;
+
+                                case FunctionResultContent fr:
+                                    LogToolResult(ImageContentSanitizingChatClient.DescribeResult(fr.Result));
+                                    break;
+
+                                case UsageContent usage:
+                                    if (usage.Details.InputTokenCount.HasValue)
+                                        inputTokens = usage.Details.InputTokenCount.Value;
+                                    if (usage.Details.OutputTokenCount.HasValue)
+                                        outputTokens = usage.Details.OutputTokenCount.Value;
+                                    if (usage.Details.TotalTokenCount.HasValue)
+                                        totalTokens = usage.Details.TotalTokenCount.Value;
+                                    break;
+                            }
+                        }
+
+                        if (!string.IsNullOrEmpty(update.Text))
+                            textBuffer.Append(update.Text);
+                    }
+                }
+                finally
+                {
+                    TracingChatClient.ResetCallState(sessionId);
+                    TracingChatClient.CurrentSessionKey = null;
+                }
+
+                if (totalTokens == 0 && (inputTokens > 0 || outputTokens > 0))
+                    totalTokens = inputTokens + outputTokens;
+
+                if (totalTokens > 0)
+                {
+                    tokenTracker?.Update(inputTokens, outputTokens);
+                    var displayInput = tokenTracker?.LastInputTokens ?? inputTokens;
+                    var displayOutput = tokenTracker?.TotalOutputTokens ?? outputTokens;
+                    textBuffer.Append($"\n\n[↑ {displayInput} input ↓ {displayOutput} output]");
+                }
+
+                await FlushTextBufferAsync(pusher, textBuffer);
+
+                if (totalTokens > 0)
+                {
+                    _tokenUsageStore?.Record(new TokenUsageRecord
+                    {
+                        Source = TokenUsageSource.WeCom,
+                        UserId = from.UserId,
+                        DisplayName = from.Name,
+                        InputTokens = inputTokens,
+                        OutputTokens = outputTokens
+                    });
+                }
+
+                _agentFactory?.TryConsolidateMemory(session, sessionId);
+
+                await _sessionStore.SaveAsync(_agent, session, sessionId, CancellationToken.None);
             }
-
-            _agentFactory?.TryConsolidateMemory(session, sessionId);
-
-            await _sessionStore.SaveAsync(_agent, session, sessionId, CancellationToken.None);
         }
         catch (SessionGateOverflowException)
         {
-            AnsiConsole.MarkupLine(
-                $"[grey][[WeCom]][/] [yellow]Request evicted for session {Markup.Escape(sessionId)} (queue overflow)[/]");
+            AnsiConsole.MarkupLine($"[grey][[WeCom]][/] [yellow]Request evicted for session {Markup.Escape(sessionId)} (queue overflow)[/]");
             try
             {
                 await pusher.PushTextAsync("消息过多，该条已跳过，请稍后重试。");
@@ -286,7 +294,7 @@ public sealed class WeComChannelAdapter : IAsyncDisposable
         await pusher.PushTextAsync(info);
     }
 
-    private async Task<string?> HandleEventMessageAsync(string eventType, string chatType, WeComFrom from,
+    private static async Task<string?> HandleEventMessageAsync(string eventType, string chatType, WeComFrom from,
         IWeComPusher pusher)
     {
         var message = eventType switch

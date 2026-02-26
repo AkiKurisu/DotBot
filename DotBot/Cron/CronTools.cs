@@ -1,7 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json;
-using DotBot.QQ;
-using DotBot.WeCom;
+using DotBot.Abstractions;
 
 namespace DotBot.Cron;
 
@@ -25,8 +24,8 @@ public sealed class CronTools(CronService cronService)
         [Description("Display name for the job. Optional, only used when action is 'add'.")] string? name = null,
         [Description("The ID of the job to delete. Required when action is 'remove'. Use action 'list' first to get job IDs.")] string? jobId = null,
         [Description("Whether to deliver results after the job runs. Defaults to true. Results are sent to the task creator unless 'channel' or 'toUser' overrides the target. Only used when action is 'add'.")] bool deliver = true,
-        [Description("Override delivery target: a QQ group ID (number) or 'wecom' to send via WeCom webhook. Optional, only used when action is 'add'.")] string? channel = null,
-        [Description("Override delivery target: a QQ user ID to send as private message. Optional, only used when action is 'add'.")] string? toUser = null)
+        [Description("The channel to deliver results to. Use 'qq' for QQ (group or private), 'wecom' for WeCom. Optional, auto-detected from current chat context when not specified.")] string? channel = null,
+        [Description("The delivery target within the channel. For QQ: 'group:<groupId>' for group chat, or a plain user ID for private chat. For WeCom: the ChatId of the target group. Optional, auto-detected from current chat context when not specified.")] string? toUser = null)
     {
         if (string.IsNullOrWhiteSpace(action))
             return JsonSerializer.Serialize(new { error = "Parameter 'action' is required. Must be one of: 'add', 'list', 'remove'." });
@@ -69,30 +68,20 @@ public sealed class CronTools(CronService cronService)
 
                 var payload = new CronPayload { Message = message, Deliver = deliver, Channel = channel, To = toUser };
 
-                var qqContext = QQChatContextScope.Current;
-                if (qqContext != null)
+                var session = ChannelSessionScope.Current;
+                if (session != null)
                 {
-                    payload.CreatorId = qqContext.UserId.ToString();
-                    payload.CreatorSource = "qq";
-                    if (qqContext.IsGroupMessage)
-                    {
-                        payload.CreatorGroupId = qqContext.GroupId.ToString();
-                        if (payload.Channel == null)
-                            payload.Channel = qqContext.GroupId.ToString();
-                    }
+                    payload.CreatorId = session.UserId;
+                    payload.CreatorSource = session.Channel;
+                    payload.CreatorGroupId = session.GroupId;
+                    if (payload.Channel == null)
+                        payload.Channel = session.Channel;
+                    if (payload.To == null)
+                        payload.To = session.DefaultDeliveryTarget;
                 }
                 else
                 {
-                    var wecomContext = WeComChatContextScope.Current;
-                    if (wecomContext != null)
-                    {
-                        payload.CreatorId = wecomContext.UserId;
-                        payload.CreatorSource = "wecom";
-                    }
-                    else
-                    {
-                        payload.CreatorSource = "api";
-                    }
+                    payload.CreatorSource = "api";
                 }
 
                 var job = cronService.AddJob(name ?? message[..Math.Min(message.Length, 30)], schedule, payload, deleteAfterRun: delaySeconds.HasValue);

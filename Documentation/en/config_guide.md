@@ -441,11 +441,12 @@ Cron is a scheduled task scheduling system supporting one-time and recurring tas
 
 Cron tasks support multiple delivery channels (set `deliver: true` when creating the task):
 
-| Channel Parameter | Description | Prerequisite |
-|-------------------|-------------|--------------|
-| `channel: "<group_number>"` | Deliver to specified QQ group | QQ Bot mode |
-| `to: "<qq_number>"` | Deliver to specified QQ private chat | QQ Bot mode |
-| `channel: "wecom"` | Deliver to WeCom group | WeCom config enabled |
+| `channel` | `to` | Description | Prerequisite |
+|-----------|------|-------------|--------------|
+| `"qq"` | `"group:<groupId>"` | Deliver to specified QQ group | QQ Bot mode |
+| `"qq"` | `"<qqUserId>"` | Deliver to specified QQ private chat | QQ Bot mode |
+| `"wecom"` | `"<ChatId>"` | Deliver to specific WeCom group | WeCom Bot mode |
+| `"wecom"` | (omit) | Deliver to WeCom (global Webhook) | `WeCom` config enabled |
 
 ### Agent Self-Service Task Creation
 
@@ -707,7 +708,7 @@ In Gateway mode, the Cron task `deliver` feature routes to the correct channel v
 | `channel` value | Delivery target | Example `to` |
 |---|---|---|
 | `"qq"` | QQ private chat (`to` = QQ number) or group (`to` = group number with `group:` prefix) | `"123456789"` / `"group:98765432"` |
-| `"wecom"` | WeCom Webhook push | (not required) |
+| `"wecom"` | Specific WeCom group (`to` = ChatId); omit `to` to fall back to global `WeCom.WebhookUrl` | `"wrxxxxxxxx"` |
 | `"api"` | API channel has no proactive delivery; ignored | — |
 
 ### Heartbeat Cross-Channel Notifications

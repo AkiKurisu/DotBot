@@ -175,9 +175,10 @@ Cron 任务支持投递到企业微信群，只需在创建任务时指定 `chan
 |------|----------|
 | `QQBot.Enabled = true` | QQ 机器人模式 |
 | `WeComBot.Enabled = true` | 企业微信机器人模式 |
+| `Api.Enabled = true` | API 模式 |
 | 其他 | CLI 模式 |
 
-> **注意**：QQ Bot 和 WeCom Bot 不能同时启用，QQ Bot 优先级更高。
+> **注意**：默认情况下（`Gateway.Enabled = false`），以上模式按优先级顺序互斥，仅运行优先级最高的一个。若需同时运行 QQ Bot、WeCom Bot 和 API，请启用 [Gateway 模式](./config_guide.md#gateway-多-channel-并发模式)。
 
 ### 2.4 权限与审批机制
 
@@ -518,13 +519,14 @@ await pusher.PushFileAsync(fileMediaId);
 
 ### Cron 投递渠道
 
-| 渠道参数 | 目标 | 前置条件 |
-|----------|------|----------|
-| `channel: "<群号>"` | QQ 群 | QQ Bot 模式 |
-| `to: "<QQ号>"` | QQ 私聊 | QQ Bot 模式 |
-| `channel: "wecom"` | 企业微信群 | 启用 `WeCom` 配置 |
+| `channel` | `to` | 投递目标 | 前置条件 |
+|-----------|------|---------|----------|
+| `"qq"` | `"group:<群号>"` | QQ 群 | QQ Bot 模式 |
+| `"qq"` | `"<QQ号>"` | QQ 私聊 | QQ Bot 模式 |
+| `"wecom"` | `"<ChatId>"` | 企业微信指定群 | WeCom Bot 模式 |
+| `"wecom"` | 不填 | 企业微信（全局 Webhook） | 启用 `WeCom` 配置 |
 
-> 在企业微信机器人模式下，Cron 任务通过 `WeCom.WebhookUrl` 投递结果。
+> 从企业微信群对话中创建的 Cron 任务会自动关联当前群的 ChatId，投递时优先发送到该群；若 ChatId 尚未缓存（机器人重启后首次收消息前），则回退到 `WeCom.WebhookUrl`。
 
 ---
 

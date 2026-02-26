@@ -178,7 +178,7 @@ Add the `WeComBot` config section in `appsettings.json`:
 | `Api.Enabled = true` | API mode |
 | Other | CLI mode |
 
-> **Note**: QQ Bot, WeCom Bot, and API mode cannot be enabled simultaneously. QQ Bot has the highest priority.
+> **Note**: By default (`Gateway.Enabled = false`), these modes are mutually exclusive and only the highest-priority enabled mode runs. To run QQ Bot, WeCom Bot, and API simultaneously, enable [Gateway mode](./config_guide.md#gateway-multi-channel-concurrent-mode).
 
 ### 2.4 Permissions & Approval
 
@@ -454,13 +454,14 @@ When both `Heartbeat.NotifyAdmin` and `WeCom.Enabled` are enabled, heartbeat exe
 
 ### Cron Delivery Channels
 
-| Channel Parameter | Target | Prerequisite |
-|-------------------|--------|--------------|
-| `channel: "<group_number>"` | QQ group | QQ Bot mode |
-| `to: "<qq_number>"` | QQ private chat | QQ Bot mode |
-| `channel: "wecom"` | WeCom group | WeCom config enabled |
+| `channel` | `to` | Delivery Target | Prerequisite |
+|-----------|------|----------------|--------------|
+| `"qq"` | `"group:<groupId>"` | QQ group | QQ Bot mode |
+| `"qq"` | `"<qqUserId>"` | QQ private chat | QQ Bot mode |
+| `"wecom"` | `"<ChatId>"` | Specific WeCom group | WeCom Bot mode |
+| `"wecom"` | (omit) | WeCom (global Webhook) | `WeCom` config enabled |
 
-> In WeCom Bot mode, Cron tasks deliver results via `WeCom.WebhookUrl`.
+> Cron tasks created from within a WeCom group chat automatically capture the current group's ChatId. Delivery is routed to that group; if the ChatId is not yet cached (e.g., before the first message after a restart), it falls back to `WeCom.WebhookUrl`.
 
 ---
 

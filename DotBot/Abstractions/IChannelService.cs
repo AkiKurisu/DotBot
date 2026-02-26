@@ -57,4 +57,11 @@ public interface IChannelService : IAsyncDisposable
     /// <param name="target">The target identifier (e.g., user ID, group ID, chat ID).</param>
     /// <param name="content">The message content to deliver.</param>
     Task DeliverMessageAsync(string target, string content);
+
+    /// <summary>
+    /// Returns the list of delivery targets for admin notifications (e.g. Heartbeat results).
+    /// Each target is passed to <see cref="DeliverMessageAsync"/> when broadcasting to admins.
+    /// Return an empty list if this channel does not support admin notifications.
+    /// </summary>
+    IReadOnlyList<string> GetAdminTargets() => [];
 }

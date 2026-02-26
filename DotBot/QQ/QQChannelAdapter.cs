@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using DotBot.Abstractions;
 using DotBot.Agents;
 using DotBot.CLI;
 using DotBot.Commands.ChannelAdapters;
@@ -164,111 +165,119 @@ public sealed class QQChannelAdapter : IAsyncDisposable
 
         try
         {
-            using var _ = ApprovalContextScope.Set(approvalContext);
-            using var __ = QQChatContextScope.Set(chatContext);
-            using var ___ = await _sessionGate.AcquireAsync(sessionId);
-
-            var session = await _sessionStore.LoadOrCreateAsync(_agent, sessionId, CancellationToken.None);
-
-            var textBuffer = new StringBuilder();
-            long inputTokens = 0, outputTokens = 0, totalTokens = 0;
-            var tokenTracker = _agentFactory?.GetOrCreateTokenTracker(sessionId);
-
-            _traceCollector?.RecordSessionMetadata(
-                sessionId,
-                null,
-                _agentFactory?.LastCreatedTools?.Select(t => t.Name));
-
-            TracingChatClient.CurrentSessionKey = sessionId;
-            TracingChatClient.ResetCallState(sessionId);
-            try
+            using (ApprovalContextScope.Set(approvalContext))
+            using (QQChatContextScope.Set(chatContext))
+            using (ChannelSessionScope.Set(new ChannelSessionInfo
+                   {
+                       Channel = "qq",
+                       UserId = evt.UserId.ToString(),
+                       GroupId = evt.IsGroupMessage ? evt.GroupId.ToString() : null,
+                       DefaultDeliveryTarget = evt.IsGroupMessage ? $"group:{evt.GroupId}" : null
+                   }))
+            using (await _sessionGate.AcquireAsync(sessionId))
             {
-                await foreach (var update in _agent.RunStreamingAsync(RuntimeContextBuilder.AppendTo(plainText), session))
-                {
-                    foreach (var content in update.Contents)
-                    {
-                        switch (content)
-                        {
-                            case FunctionCallContent functionCall:
-                                await FlushTextBufferAsync(evt, textBuffer);
+                var session = await _sessionStore.LoadOrCreateAsync(_agent, sessionId, CancellationToken.None);
 
-                                var icon = ToolIconRegistry.GetToolIcon(functionCall.Name);
-                                var toolNotice = $"{icon} 正在调用: {functionCall.Name}...";
-                                await _client.SendMessageAsync(evt, toolNotice);
-                                LogOutgoing(evt, toolNotice);
-                                LogToolCall(functionCall.Name, functionCall.Arguments);
-                                break;
-                            case FunctionResultContent fr:
-                                LogToolResult(Agents.ImageContentSanitizingChatClient.DescribeResult(fr.Result));
-                                break;
-                            case UsageContent usage:
-                                if (usage.Details.InputTokenCount.HasValue)
-                                    inputTokens = usage.Details.InputTokenCount.Value;
-                                if (usage.Details.OutputTokenCount.HasValue)
-                                    outputTokens = usage.Details.OutputTokenCount.Value;
-                                if (usage.Details.TotalTokenCount.HasValue)
-                                    totalTokens = usage.Details.TotalTokenCount.Value;
-                                break;
-                        }
-                    }
+                var textBuffer = new StringBuilder();
+                long inputTokens = 0, outputTokens = 0, totalTokens = 0;
+                var tokenTracker = _agentFactory?.GetOrCreateTokenTracker(sessionId);
 
-                    if (!string.IsNullOrEmpty(update.Text))
-                        textBuffer.Append(update.Text);
-                }
-            }
-            finally
-            {
+                _traceCollector?.RecordSessionMetadata(
+                    sessionId,
+                    null,
+                    _agentFactory?.LastCreatedTools?.Select(t => t.Name));
+
+                TracingChatClient.CurrentSessionKey = sessionId;
                 TracingChatClient.ResetCallState(sessionId);
-                TracingChatClient.CurrentSessionKey = null;
-            }
-
-            if (totalTokens == 0 && (inputTokens > 0 || outputTokens > 0))
-                totalTokens = inputTokens + outputTokens;
-
-            if (totalTokens > 0)
-            {
-                tokenTracker?.Update(inputTokens, outputTokens);
-                var displayInput = tokenTracker?.LastInputTokens ?? inputTokens;
-                var displayOutput = tokenTracker?.TotalOutputTokens ?? outputTokens;
-                textBuffer.Append($"\n\n[↑ {displayInput} input ↓ {displayOutput} output]");
-            }
-
-            await FlushTextBufferAsync(evt, textBuffer);
-
-            if (totalTokens > 0)
-            {
-                _tokenUsageStore?.Record(new TokenUsageRecord
+                try
                 {
-                    Source = evt.IsGroupMessage ? TokenUsageSource.QQGroup : TokenUsageSource.QQPrivate,
-                    UserId = evt.UserId.ToString(),
-                    DisplayName = evt.Sender.DisplayName,
-                    GroupId = evt.IsGroupMessage ? evt.GroupId : 0,
-                    InputTokens = inputTokens,
-                    OutputTokens = outputTokens
-                });
-            }
+                    await foreach (var update in _agent.RunStreamingAsync(RuntimeContextBuilder.AppendTo(plainText), session))
+                    {
+                        foreach (var content in update.Contents)
+                        {
+                            switch (content)
+                            {
+                                case FunctionCallContent functionCall:
+                                    await FlushTextBufferAsync(evt, textBuffer);
 
-            if (_agentFactory is { Compactor: not null, MaxContextTokens: > 0 } &&
-                inputTokens >= _agentFactory.MaxContextTokens)
-            {
-                AnsiConsole.MarkupLine($"[grey][[QQ]][/] [yellow]Context compacting for session {Markup.Escape(sessionId)}...[/]");
-                await _client.SendMessageAsync(evt, "⚠️ 上下文过长，正在压缩历史对话...");
-                if (await _agentFactory.Compactor.TryCompactAsync(session))
-                {
-                    tokenTracker?.Reset();
-                    _traceCollector?.RecordContextCompaction(sessionId);
-                    await _client.SendMessageAsync(evt, "✅ 上下文压缩完成，可以继续对话。");
+                                    var icon = ToolIconRegistry.GetToolIcon(functionCall.Name);
+                                    var toolNotice = $"{icon} 正在调用: {functionCall.Name}...";
+                                    await _client.SendMessageAsync(evt, toolNotice);
+                                    LogOutgoing(evt, toolNotice);
+                                    LogToolCall(functionCall.Name, functionCall.Arguments);
+                                    break;
+                                case FunctionResultContent fr:
+                                    LogToolResult(ImageContentSanitizingChatClient.DescribeResult(fr.Result));
+                                    break;
+                                case UsageContent usage:
+                                    if (usage.Details.InputTokenCount.HasValue)
+                                        inputTokens = usage.Details.InputTokenCount.Value;
+                                    if (usage.Details.OutputTokenCount.HasValue)
+                                        outputTokens = usage.Details.OutputTokenCount.Value;
+                                    if (usage.Details.TotalTokenCount.HasValue)
+                                        totalTokens = usage.Details.TotalTokenCount.Value;
+                                    break;
+                            }
+                        }
+
+                        if (!string.IsNullOrEmpty(update.Text))
+                            textBuffer.Append(update.Text);
+                    }
                 }
+                finally
+                {
+                    TracingChatClient.ResetCallState(sessionId);
+                    TracingChatClient.CurrentSessionKey = null;
+                }
+
+                if (totalTokens == 0 && (inputTokens > 0 || outputTokens > 0))
+                    totalTokens = inputTokens + outputTokens;
+
+                if (totalTokens > 0)
+                {
+                    tokenTracker?.Update(inputTokens, outputTokens);
+                    var displayInput = tokenTracker?.LastInputTokens ?? inputTokens;
+                    var displayOutput = tokenTracker?.TotalOutputTokens ?? outputTokens;
+                    textBuffer.Append($"\n\n[↑ {displayInput} input ↓ {displayOutput} output]");
+                }
+
+                await FlushTextBufferAsync(evt, textBuffer);
+
+                if (totalTokens > 0)
+                {
+                    _tokenUsageStore?.Record(new TokenUsageRecord
+                    {
+                        Source = evt.IsGroupMessage ? TokenUsageSource.QQGroup : TokenUsageSource.QQPrivate,
+                        UserId = evt.UserId.ToString(),
+                        DisplayName = evt.Sender.DisplayName,
+                        GroupId = evt.IsGroupMessage ? evt.GroupId : 0,
+                        InputTokens = inputTokens,
+                        OutputTokens = outputTokens
+                    });
+                }
+
+                if (_agentFactory is { Compactor: not null, MaxContextTokens: > 0 } &&
+                    inputTokens >= _agentFactory.MaxContextTokens)
+                {
+                    AnsiConsole.MarkupLine(
+                        $"[grey][[QQ]][/] [yellow]Context compacting for session {Markup.Escape(sessionId)}...[/]");
+                    await _client.SendMessageAsync(evt, "⚠️ 上下文过长，正在压缩历史对话...");
+                    if (await _agentFactory.Compactor.TryCompactAsync(session))
+                    {
+                        tokenTracker?.Reset();
+                        _traceCollector?.RecordContextCompaction(sessionId);
+                        await _client.SendMessageAsync(evt, "✅ 上下文压缩完成，可以继续对话。");
+                    }
+                }
+
+                _agentFactory?.TryConsolidateMemory(session, sessionId);
+
+                await _sessionStore.SaveAsync(_agent, session, sessionId, CancellationToken.None);
             }
-
-            _agentFactory?.TryConsolidateMemory(session, sessionId);
-
-            await _sessionStore.SaveAsync(_agent, session, sessionId, CancellationToken.None);
         }
         catch (SessionGateOverflowException)
         {
-            AnsiConsole.MarkupLine(
-                $"[grey][[QQ]][/] [yellow]Request evicted for session {Markup.Escape(sessionId)} (queue overflow)[/]");
+            AnsiConsole.MarkupLine($"[grey][[QQ]][/] [yellow]Request evicted for session {Markup.Escape(sessionId)} (queue overflow)[/]");
             try
             {
                 await _client.SendMessageAsync(evt, "消息过多，该条已跳过，请稍后重试。");

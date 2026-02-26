@@ -1,5 +1,4 @@
 using DotBot.Abstractions;
-using DotBot.Configuration;
 using Spectre.Console;
 
 namespace DotBot.Gateway;
@@ -9,13 +8,7 @@ namespace DotBot.Gateway;
 /// </summary>
 public sealed class MessageRouter : IMessageRouter
 {
-    private readonly AppConfig _config;
     private readonly Dictionary<string, IChannelService> _channels = new(StringComparer.OrdinalIgnoreCase);
-
-    public MessageRouter(AppConfig config)
-    {
-        _config = config;
-    }
 
     public void RegisterChannel(IChannelService service)
     {
@@ -45,35 +38,20 @@ public sealed class MessageRouter : IMessageRouter
 
     public async Task BroadcastToAdminsAsync(string content)
     {
-        // Notify QQ admins
-        if (_channels.TryGetValue("qq", out var qqChannel))
+        foreach (var channel in _channels.Values)
         {
-            foreach (var adminId in _config.QQBot.AdminUsers)
+            var targets = channel.GetAdminTargets();
+            foreach (var target in targets)
             {
                 try
                 {
-                    await qqChannel.DeliverMessageAsync(adminId.ToString(), content);
+                    await channel.DeliverMessageAsync(target, content);
                 }
                 catch (Exception ex)
                 {
                     AnsiConsole.MarkupLine(
-                        $"[grey][[Gateway]][/] [red]QQ admin {adminId} notify failed: {Markup.Escape(ex.Message)}[/]");
+                        $"[grey][[Gateway]][/] [red]{Markup.Escape(channel.Name)} admin notify failed: {Markup.Escape(ex.Message)}[/]");
                 }
-            }
-        }
-
-        // Notify via WeCom webhook (broadcast to group)
-        if (_channels.TryGetValue("wecom", out var wecomChannel) &&
-            _config.Heartbeat.NotifyAdmin)
-        {
-            try
-            {
-                await wecomChannel.DeliverMessageAsync("", content);
-            }
-            catch (Exception ex)
-            {
-                AnsiConsole.MarkupLine(
-                    $"[grey][[Gateway]][/] [red]WeCom notify failed: {Markup.Escape(ex.Message)}[/]");
             }
         }
     }
