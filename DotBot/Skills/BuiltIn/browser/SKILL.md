@@ -75,3 +75,19 @@ npx playwright install webkit
 Supported values for `--browser`: `firefox`, `webkit`, `chrome`, `msedge`.
 
 > **Tip:** On Linux servers, stick to `chrome` or `firefox` (headless). WebKit is only reliable on macOS.
+
+## Secrets (Credentials Management)
+
+The Playwright MCP server supports a `--secrets` parameter that loads a dotenv file containing sensitive credentials. When secrets are configured, you **MUST** use the secret key names (not the actual values) when filling in sensitive form fields like passwords.
+
+**How it works:**
+- The `--secrets` flag points to a `.env` file with key-value pairs (e.g. `MY_PASSWORD=actual_password_value`)
+- When you call `browser_type` or `browser_fill_form`, pass the **key name** (e.g. `MY_PASSWORD`) as the `text`/`value` parameter instead of the actual password
+- The Playwright MCP server will automatically replace the key name with the real value before typing it into the browser
+- In the response, any occurrence of the real secret value will be redacted as `<secret>KEY_NAME</secret>`
+
+**Example:** If the secrets file contains `LOGIN_PASSWORD=abc123`, then to fill a password field:
+- Use `browser_type` with `text: "LOGIN_PASSWORD"` — the server will type `abc123` into the browser
+- Do NOT type the actual password value — always use the key name
+
+**Important:** The secret key names are the identifiers defined in the `.env` file. You should ask the user what secret keys are available if you encounter a login page and don't know the key names.
