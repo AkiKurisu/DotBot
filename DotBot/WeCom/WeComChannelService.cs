@@ -1,6 +1,7 @@
 using System.ClientModel;
 using DotBot.Abstractions;
 using DotBot.Agents;
+using DotBot.Commands.Custom;
 using DotBot.Configuration;
 using DotBot.Cron;
 using DotBot.DashBoard;
@@ -85,7 +86,8 @@ public sealed class WeComChannelService(
                 McpClientManager = mcpClientManager.Tools.Count > 0 ? mcpClientManager : null,
                 TraceCollector = traceCollector
             },
-            traceCollector: traceCollector);
+            traceCollector: traceCollector,
+            customCommandLoader: sp.GetService<CustomCommandLoader>());
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -96,6 +98,7 @@ public sealed class WeComChannelService(
         var tokenUsageStore = sp.GetService<TokenUsageStore>();
 
         var sessionGate = sp.GetRequiredService<SessionGate>();
+        var customCommandLoader = sp.GetService<CustomCommandLoader>();
         _adapter = new WeComChannelAdapter(
             agent, sessionStore, registry,
             permissionService, wecomApprovalService, sessionGate,
@@ -103,7 +106,8 @@ public sealed class WeComChannelService(
             cronService: CronService,
             agentFactory: agentFactory,
             traceCollector: traceCollector,
-            tokenUsageStore: tokenUsageStore);
+            tokenUsageStore: tokenUsageStore,
+            customCommandLoader: customCommandLoader);
 
         var builder = WebApplication.CreateBuilder();
         _webApp = builder.Build();

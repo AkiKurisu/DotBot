@@ -1,6 +1,7 @@
 using System.ClientModel;
 using System.Collections.Concurrent;
 using DotBot.Abstractions;
+using DotBot.Commands.Custom;
 using DotBot.Configuration;
 using DotBot.Context;
 using DotBot.DashBoard;
@@ -34,6 +35,7 @@ public sealed class AgentFactory
     private readonly HashSet<string> _globalEnabledToolNames;
     private readonly ToolProviderContext _toolProviderContext;
     private readonly IReadOnlyList<IAgentToolProvider> _toolProviders;
+    private readonly CustomCommandLoader? _customCommandLoader;
 
     /// <summary>
     /// Creates a new AgentFactory with tool providers.
@@ -48,7 +50,8 @@ public sealed class AgentFactory
         PathBlacklist? blacklist,
         IEnumerable<IAgentToolProvider> toolProviders,
         ToolProviderContext? toolProviderContext = null,
-        TraceCollector? traceCollector = null)
+        TraceCollector? traceCollector = null,
+        CustomCommandLoader? customCommandLoader = null)
     {
         _config = config;
         _memoryStore = memoryStore;
@@ -56,6 +59,7 @@ public sealed class AgentFactory
         _cortexBotPath = cortexBotPath;
         _workspacePath = workspacePath;
         _traceCollector = traceCollector;
+        _customCommandLoader = customCommandLoader;
         _globalEnabledToolNames = ResolveGlobalEnabledToolNames(_config);
 
         _chatClient = new OpenAIClient(new ApiKeyCredential(config.ApiKey), new OpenAIClientOptions
@@ -262,7 +266,8 @@ public sealed class AgentFactory
                     _workspacePath,
                     _config.SystemInstructions,
                     _traceCollector,
-                    () => tools.Select(t => t.Name).ToArray()))
+                    () => tools.Select(t => t.Name).ToArray(),
+                    _customCommandLoader))
         };
 
         return configuredChatClient.AsAIAgent(options);

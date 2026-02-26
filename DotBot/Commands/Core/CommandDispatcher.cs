@@ -1,4 +1,5 @@
 using DotBot.CLI;
+using DotBot.Commands.Custom;
 using DotBot.Commands.Handlers;
 
 namespace DotBot.Commands.Core;
@@ -10,6 +11,7 @@ public sealed class CommandDispatcher
 {
     private readonly Dictionary<string, ICommandHandler> _handlers = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _knownCommands = [];
+    private CustomCommandLoader? _customCommandLoader;
     
     /// <summary>
     /// Gets all known command names.
@@ -32,16 +34,14 @@ public sealed class CommandDispatcher
     
     /// <summary>
     /// Attempts to dispatch and handle a command.
+    /// Returns a <see cref="CommandResult"/> so callers can check <see cref="CommandResult.ExpandedPrompt"/>
+    /// for custom commands that need agent processing.
     /// </summary>
-    /// <param name="rawText">The raw input text.</param>
-    /// <param name="context">The command context.</param>
-    /// <param name="responder">The responder for sending messages.</param>
-    /// <returns>True if the command was handled, false otherwise.</returns>
-    public async Task<bool> TryDispatchAsync(string rawText, CommandContext context, ICommandResponder responder)
+    public async Task<CommandResult> TryDispatchAsync(string rawText, CommandContext context, ICommandResponder responder)
     {
         var trimmedText = rawText.Trim();
         if (!trimmedText.StartsWith('/'))
-            return false;
+            return CommandResult.NotHandled();
         
         // Parse command and arguments
         var parts = trimmedText.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -56,25 +56,33 @@ public sealed class CommandDispatcher
             Arguments = args
         };
         
-        // Try to find handler
+        // Try built-in handler first
         if (_handlers.TryGetValue(cmd, out var handler))
+            return await handler.HandleAsync(context, responder);
+
+        // Try custom commands
+        if (_customCommandLoader != null)
         {
-            var result = await handler.HandleAsync(context, responder);
-            return result.Handled;
+            var resolved = _customCommandLoader.TryResolve(trimmedText);
+            if (resolved != null)
+                return CommandResult.PromptExpansion(resolved.ExpandedPrompt);
         }
         
         // Unknown command - format helpful message
         var msg = CommandHelper.FormatUnknownCommandMessage(rawText, _knownCommands.ToArray());
         await responder.SendTextAsync(msg);
-        return true;
+        return CommandResult.HandledResult();
     }
     
     /// <summary>
     /// Creates a default dispatcher with all built-in handlers registered.
     /// </summary>
-    public static CommandDispatcher CreateDefault()
+    public static CommandDispatcher CreateDefault(CustomCommandLoader? customCommandLoader = null)
     {
-        var dispatcher = new CommandDispatcher();
+        var dispatcher = new CommandDispatcher
+        {
+            _customCommandLoader = customCommandLoader
+        };
         dispatcher.RegisterHandler(new NewCommandHandler());
         dispatcher.RegisterHandler(new DebugCommandHandler());
         dispatcher.RegisterHandler(new HelpCommandHandler());

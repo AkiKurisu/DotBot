@@ -22,8 +22,6 @@ public sealed class HelpCommandHandler : ICommandHandler
         sb.AppendLine("/cron list - 查看定时任务列表");
         sb.AppendLine("/cron remove <id> - 删除定时任务");
         sb.AppendLine("/help - 显示此帮助信息");
-        sb.AppendLine();
-        sb.AppendLine("直接输入问题即可与 DotBot 对话。");
         
         await responder.SendTextAsync(sb.ToString().TrimEnd());
         return CommandResult.HandledResult();

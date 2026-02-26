@@ -27,6 +27,7 @@
     <Content Include="Resources\favicon.ico" />
     <EmbeddedResource Include="Resources\DashBoard.html" />
     <EmbeddedResource Include="Skills\BuiltIn\**\*" />
+    <EmbeddedResource Include="Commands\CustomCommands\BuiltIn\**\*" />
   </ItemGroup>
 
   <ItemGroup>

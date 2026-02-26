@@ -634,6 +634,74 @@ Once configured, the Agent automatically gains 22 browser control tools, includi
 
 ---
 
+## Custom Commands
+
+Custom Commands let you save frequently used prompt templates as Markdown files and invoke them via `/command-name`. DotBot expands the command file content into a full prompt and passes it to the Agent for processing.
+
+### Command File Locations
+
+| Level | Path | Priority |
+|-------|------|----------|
+| Workspace | `<workspace>/.bot/commands/` | High (overrides same-name user-level commands) |
+| User | `~/.bot/commands/` | Low |
+
+### Command File Format
+
+Each `.md` file corresponds to a command; the filename is the command name (e.g. `code-review.md` → `/code-review`).
+
+Files support YAML frontmatter for metadata:
+
+```markdown
+---
+description: Review code changes for bugs, security issues, and style
+---
+
+Run `git diff` on the current branch, then review all changes for:
+1. Correctness and logic errors
+2. Security vulnerabilities
+3. Edge cases and error handling
+4. Code style and readability
+
+$ARGUMENTS
+```
+
+### Placeholders
+
+| Placeholder | Description |
+|-------------|-------------|
+| `$ARGUMENTS` | The full argument string from user input (`/cmd foo bar` → `foo bar`) |
+| `$1`, `$2`, ... | Positional arguments split by spaces |
+
+### Subdirectory Namespaces
+
+Commands can be organized in subdirectories, with directory separators mapped to `:`:
+
+```
+commands/
+├── code-review.md      → /code-review
+├── explain.md          → /explain
+└── frontend/
+    └── component.md    → /frontend:component
+```
+
+### Built-in Commands
+
+DotBot ships with the following built-in commands, automatically deployed to the workspace `commands/` directory on first run:
+
+| Command | Description |
+|---------|-------------|
+| `/code-review` | Review code changes |
+| `/explain` | Explain code in detail |
+| `/summarize` | Summarize content concisely |
+
+You can edit these files to customize their behavior, or add new `.md` files to create your own commands.
+
+### CLI Commands
+
+- `/commands` — List all available custom commands
+
+---
+
 ## QQ Bot Commands
 
 QQ Bot mode supports the following slash commands (send directly in chat):

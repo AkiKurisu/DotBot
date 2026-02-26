@@ -1,6 +1,7 @@
 using System.Text;
 using DotBot.Agents;
 using DotBot.CLI.Rendering;
+using DotBot.Commands.Custom;
 using DotBot.Configuration;
 using DotBot.Context;
 using DotBot.Cron;
@@ -22,7 +23,8 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
     HeartbeatService? heartbeatService = null, CronService? cronService = null,
     AgentFactory? agentFactory = null, McpClientManager? mcpClientManager = null,
     string? dashBoardUrl = null,
-    LanguageService? languageService = null, TokenUsageStore? tokenUsageStore = null)
+    LanguageService? languageService = null, TokenUsageStore? tokenUsageStore = null,
+    CustomCommandLoader? customCommandLoader = null)
 {
     private readonly AppConfig _config = config ?? new AppConfig();
     private readonly LanguageService _lang = languageService ?? new LanguageService();
@@ -49,8 +51,8 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
             }
 
             var trimmed = input.Trim();
-            var (handled, shouldExit) = await HandleCommand(trimmed);
-            if (handled)
+            var (handled, shouldExit, expandedPrompt) = await HandleCommand(trimmed);
+            if (handled && expandedPrompt == null)
             {
                 if (shouldExit)
                 {
@@ -59,7 +61,8 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
                 continue;
             }
 
-            if (await RunStreamingAsync(trimmed, _agentSession, cancellationToken))
+            var agentInput = expandedPrompt ?? trimmed;
+            if (await RunStreamingAsync(agentInput, _agentSession, cancellationToken))
             {
                 await TryCompactContextAsync(_currentSessionId, _agentSession, cancellationToken);
                 agentFactory?.TryConsolidateMemory(_agentSession, _currentSessionId);
@@ -180,28 +183,28 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
     [
         "/exit", "/help", "/clear", "/new", "/load", "/delete",
         "/init", "/skills", "/mcp", "/sessions", "/memory",
-        "/config", "/debug", "/heartbeat", "/cron", "/lang"
+        "/config", "/debug", "/heartbeat", "/cron", "/lang", "/commands"
     ];
 
-    private async Task<(bool Handled, bool ShouldExit)> HandleCommand(string input)
+    private async Task<(bool Handled, bool ShouldExit, string? ExpandedPrompt)> HandleCommand(string input)
     {
         switch (input.ToLowerInvariant())
         {
             case "/exit":
-                return (true, true);
+                return (true, true, null);
 
             case "/help":
                 StatusPanel.ShowHelp(_lang);
-                return (true, false);
+                return (true, false, null);
 
             case "/clear":
                 AnsiConsole.Clear();
                 ShowWelcomeScreen(_currentSessionId);
-                return (true, false);
+                return (true, false, null);
 
             case "/new":
                 await NewSession(CancellationToken.None);
-                return (true, false);
+                return (true, false, null);
 
             case "/load":
                 var sessions = sessionStore.ListSessions();
@@ -210,7 +213,7 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
                 {
                     await LoadSessionAsync(selectedSession, CancellationToken.None);
                 }
-                return (true, false);
+                return (true, false, null);
 
             case "/delete":
                 var sessionsToDelete = sessionStore.ListSessions();
@@ -224,53 +227,65 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
                         ShowWelcomeScreen(_currentSessionId);
                     }
                 }
-                return (true, false);
+                return (true, false, null);
 
             case "/init":
                 HandleInitCommand();
-                return (true, false);
+                return (true, false, null);
 
             case "/skills":
                 var allSkills = skillsLoader.ListSkills(filterUnavailable: false);
                 StatusPanel.ShowSkillsTable(allSkills, skillsLoader.WorkspaceSkillsPath, skillsLoader.UserSkillsPath, _lang);
-                return (true, false);
+                return (true, false, null);
 
             case "/mcp":
                 StatusPanel.ShowMcpServersTable(mcpClientManager, _lang);
-                return (true, false);
+                return (true, false, null);
 
             case "/sessions":
                 var sessionList = sessionStore.ListSessions();
                 StatusPanel.ShowSessionsTable(sessionList, _lang);
-                return (true, false);
+                return (true, false, null);
 
             case "/memory":
                 HandleMemoryCommand();
-                return (true, false);
+                return (true, false, null);
 
             case "/config":
                 HandleConfigCommand();
-                return (true, false);
+                return (true, false, null);
 
             case "/debug":
                 HandleDebugCommand();
-                return (true, false);
+                return (true, false, null);
 
             case "/lang":
                 HandleLanguageCommand();
-                return (true, false);
+                return (true, false, null);
+
+            case "/commands":
+                HandleCommandsCommand();
+                return (true, false, null);
         }
 
         if (input.StartsWith("/heartbeat", StringComparison.OrdinalIgnoreCase))
         {
             await HandleHeartbeatCommandAsync(input);
-            return (true, false);
+            return (true, false, null);
         }
 
         if (input.StartsWith("/cron", StringComparison.OrdinalIgnoreCase))
         {
             HandleCronCommand(input);
-            return (true, false);
+            return (true, false, null);
+        }
+
+        // Try custom commands before "unknown command" fallback
+        if (input.StartsWith('/') && customCommandLoader != null)
+        {
+            var resolved = customCommandLoader.TryResolve(input);
+            if (resolved != null)
+                return (true, false, resolved.ExpandedPrompt);
         }
 
         if (input.StartsWith('/'))
@@ -278,10 +293,10 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
             var msg = CommandHelper.FormatUnknownCommandMessage(input, KnownCommands, _lang);
             AnsiConsole.MarkupLine($"[red]{msg.EscapeMarkup()}[/]");
             AnsiConsole.WriteLine();
-            return (true, false);
+            return (true, false, null);
         }
 
-        return (false, false);
+        return (false, false, null);
     }
 
     private void HandleInitCommand()
@@ -400,6 +415,41 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
             AnsiConsole.MarkupLine($"[grey]  Search: grep -i \"keyword\" \"{historyPath.EscapeMarkup()}\"[/]");
         }
 
+        AnsiConsole.WriteLine();
+    }
+
+    private void HandleCommandsCommand()
+    {
+        if (customCommandLoader == null)
+        {
+            AnsiConsole.MarkupLine("[grey]Custom commands are not available.[/]\n");
+            return;
+        }
+
+        var commands = customCommandLoader.ListCommands();
+        if (commands.Count == 0)
+        {
+            AnsiConsole.MarkupLine("[grey]No custom commands found.[/]");
+            AnsiConsole.MarkupLine($"[grey]Place .md files in: {customCommandLoader.WorkspaceCommandsPath.EscapeMarkup()}[/]\n");
+            return;
+        }
+
+        var table = new Table();
+        table.Border(TableBorder.Rounded);
+        table.AddColumn("[grey]Command[/]");
+        table.AddColumn("[grey]Description[/]");
+        table.AddColumn("[grey]Source[/]");
+
+        foreach (var cmd in commands)
+        {
+            var desc = string.IsNullOrWhiteSpace(cmd.Description) ? "[grey]-[/]" : cmd.Description.EscapeMarkup();
+            var source = cmd.Source == "workspace" ? "[green]workspace[/]" : "[blue]user[/]";
+            table.AddRow($"[cyan]/{cmd.Name.EscapeMarkup()}[/]", desc, source);
+        }
+
+        AnsiConsole.Write(table);
+        AnsiConsole.MarkupLine($"[grey]Workspace: {customCommandLoader.WorkspaceCommandsPath.EscapeMarkup()}[/]");
+        AnsiConsole.MarkupLine($"[grey]User: {customCommandLoader.UserCommandsPath.EscapeMarkup()}[/]");
         AnsiConsole.WriteLine();
     }
 

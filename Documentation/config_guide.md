@@ -634,6 +634,74 @@ npx playwright install chromium
 
 ---
 
+## 自定义命令（Custom Commands）
+
+自定义命令允许你将常用的提示词模板保存为 Markdown 文件，通过 `/命令名` 快速调用。DotBot 会将命令文件的内容展开为完整提示词，然后交给 Agent 处理。
+
+### 命令文件位置
+
+| 级别 | 路径 | 优先级 |
+|------|------|--------|
+| 工作区级 | `<workspace>/.bot/commands/` | 高（覆盖同名用户级命令） |
+| 用户级 | `~/.bot/commands/` | 低 |
+
+### 命令文件格式
+
+每个 `.md` 文件对应一个命令，文件名即命令名（如 `code-review.md` → `/code-review`）。
+
+文件支持 YAML Frontmatter 定义元数据：
+
+```markdown
+---
+description: 审查代码变更，检查 Bug、安全问题和代码风格
+---
+
+运行 `git diff` 查看当前分支的所有变更，然后审查：
+1. 正确性和逻辑错误
+2. 安全漏洞
+3. 边界情况和错误处理
+4. 代码风格和可读性
+
+$ARGUMENTS
+```
+
+### 占位符
+
+| 占位符 | 说明 |
+|--------|------|
+| `$ARGUMENTS` | 用户输入的完整参数（`/cmd foo bar` → `foo bar`） |
+| `$1`, `$2`, ... | 按空格拆分的位置参数 |
+
+### 子目录命名空间
+
+支持子目录组织命令，目录分隔符映射为 `:`：
+
+```
+commands/
+├── code-review.md      → /code-review
+├── explain.md          → /explain
+└── frontend/
+    └── component.md    → /frontend:component
+```
+
+### 内置命令
+
+DotBot 自带以下内置命令，首次运行时自动部署到工作区 `commands/` 目录：
+
+| 命令 | 说明 |
+|------|------|
+| `/code-review` | 审查代码变更 |
+| `/explain` | 详细解释代码 |
+| `/summarize` | 简洁总结内容 |
+
+你可以直接编辑这些文件来自定义行为，也可以添加新的 `.md` 文件来创建自己的命令。
+
+### CLI 命令
+
+- `/commands` — 列出所有可用的自定义命令
+
+---
+
 ## QQ Bot 命令
 
 QQ Bot 模式下支持以下斜杠命令（直接在聊天中发送）：

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using DotBot.Commands.Custom;
 using DotBot.DashBoard;
 using DotBot.Memory;
 using DotBot.Skills;
@@ -16,10 +17,11 @@ public sealed class MemoryContextProvider(
     string workspacePath,
     string baseInstructions,
     TraceCollector? traceCollector = null,
-    Func<IReadOnlyList<string>>? toolNamesProvider = null)
+    Func<IReadOnlyList<string>>? toolNamesProvider = null,
+    CustomCommandLoader? customCommandLoader = null)
     : AIContextProvider
 {
-    private readonly PromptBuilder _promptBuilder = new(memoryStore, skillsLoader, cortexBotPath, workspacePath, baseInstructions);
+    private readonly PromptBuilder _promptBuilder = new(memoryStore, skillsLoader, cortexBotPath, workspacePath, baseInstructions, customCommandLoader);
 
     protected override ValueTask<AIContext> InvokingCoreAsync(InvokingContext context, CancellationToken cancellationToken = default)
     {

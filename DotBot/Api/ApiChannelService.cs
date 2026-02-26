@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using DotBot.Abstractions;
 using DotBot.Agents;
+using DotBot.Commands.Custom;
 using DotBot.Configuration;
 using DotBot.Context;
 using DotBot.Cron;
@@ -100,7 +101,8 @@ public sealed class ApiChannelService(
                 McpClientManager = mcpClientManager.Tools.Count > 0 ? mcpClientManager : null,
                 TraceCollector = traceCollector
             },
-            traceCollector: traceCollector);
+            traceCollector: traceCollector,
+            customCommandLoader: sp.GetService<CustomCommandLoader>());
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -370,7 +372,8 @@ public sealed class ApiChannelService(
                     memoryStore, skillsLoader,
                     paths.BotPath, paths.WorkspacePath,
                     config.SystemInstructions, traceCollector,
-                    () => tools.Select(t => t.Name).ToArray()))
+                    () => tools.Select(t => t.Name).ToArray(),
+                    sp.GetService<CustomCommandLoader>()))
         };
     }
 

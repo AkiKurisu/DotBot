@@ -2,6 +2,7 @@ using System.ClientModel;
 using System.Reflection;
 using DotBot.Abstractions;
 using DotBot.Agents;
+using DotBot.Commands.Custom;
 using DotBot.Configuration;
 using DotBot.Cron;
 using DotBot.DashBoard;
@@ -68,7 +69,8 @@ public sealed class CliHost(
                 McpClientManager = mcpClientManager.Tools.Count > 0 ? mcpClientManager : null,
                 TraceCollector = traceCollector
             },
-            traceCollector: traceCollector);
+            traceCollector: traceCollector,
+            customCommandLoader: sp.GetService<CustomCommandLoader>());
 
         var agent = agentFactory.CreateDefaultAgent();
         var sessionGate = sp.GetRequiredService<SessionGate>();
@@ -89,12 +91,14 @@ public sealed class CliHost(
             intervalSeconds: config.Heartbeat.IntervalSeconds,
             enabled: false);
 
+        var customCommandLoader = sp.GetService<CustomCommandLoader>();
         var repl = new ReplHost(agent, sessionStore, skillsLoader,
             paths.WorkspacePath, paths.BotPath, config,
             heartbeatService: heartbeatService, cronService: cronService,
             agentFactory: agentFactory, mcpClientManager: mcpClientManager,
             dashBoardUrl: dashBoardUrl,
-            languageService: languageService, tokenUsageStore: tokenUsageStore);
+            languageService: languageService, tokenUsageStore: tokenUsageStore,
+            customCommandLoader: customCommandLoader);
 
         cronService.OnJob = async job =>
         {
