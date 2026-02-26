@@ -121,6 +121,10 @@ public sealed class QQChannelService(
         await qqClient.StopAsync();
     }
 
+    /// <inheritdoc />
+    public IReadOnlyList<string> GetAdminTargets()
+        => config.QQBot.AdminUsers.Select(id => id.ToString()).ToList();
+
     public async Task DeliverMessageAsync(string target, string content)
     {
         // target is either "group:<groupId>" for group messages or a plain user id for private

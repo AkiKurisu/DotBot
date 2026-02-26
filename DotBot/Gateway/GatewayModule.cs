@@ -22,7 +22,7 @@ public sealed partial class GatewayModule : ModuleBase
     public override void ConfigureServices(IServiceCollection services, ModuleContext context)
     {
         // Register MessageRouter as a singleton for cross-channel delivery
-        services.AddSingleton(_ => new MessageRouter(context.Config));
+        services.AddSingleton(_ => new MessageRouter());
     }
 
     /// <inheritdoc />

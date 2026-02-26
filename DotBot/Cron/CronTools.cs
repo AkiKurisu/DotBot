@@ -1,7 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json;
-using DotBot.QQ;
-using DotBot.WeCom;
+using DotBot.Abstractions;
 
 namespace DotBot.Cron;
 
@@ -69,37 +68,20 @@ public sealed class CronTools(CronService cronService)
 
                 var payload = new CronPayload { Message = message, Deliver = deliver, Channel = channel, To = toUser };
 
-                var qqContext = QQChatContextScope.Current;
-                if (qqContext != null)
+                var session = ChannelSessionScope.Current;
+                if (session != null)
                 {
-                    payload.CreatorId = qqContext.UserId.ToString();
-                    payload.CreatorSource = "qq";
-                    if (qqContext.IsGroupMessage)
-                    {
-                        payload.CreatorGroupId = qqContext.GroupId.ToString();
-                        if (payload.Channel == null)
-                            payload.Channel = "qq";
-                        if (payload.To == null)
-                            payload.To = $"group:{qqContext.GroupId}";
-                    }
+                    payload.CreatorId = session.UserId;
+                    payload.CreatorSource = session.Channel;
+                    payload.CreatorGroupId = session.GroupId;
+                    if (payload.Channel == null)
+                        payload.Channel = session.Channel;
+                    if (payload.To == null)
+                        payload.To = session.DefaultDeliveryTarget;
                 }
                 else
                 {
-                    var wecomContext = WeComChatContextScope.Current;
-                    if (wecomContext != null)
-                    {
-                        payload.CreatorId = wecomContext.UserId;
-                        payload.CreatorSource = "wecom";
-                        payload.CreatorGroupId = wecomContext.ChatId;
-                        if (payload.Channel == null)
-                            payload.Channel = "wecom";
-                        if (payload.To == null)
-                            payload.To = wecomContext.ChatId;
-                    }
-                    else
-                    {
-                        payload.CreatorSource = "api";
-                    }
+                    payload.CreatorSource = "api";
                 }
 
                 var job = cronService.AddJob(name ?? message[..Math.Min(message.Length, 30)], schedule, payload, deleteAfterRun: delaySeconds.HasValue);

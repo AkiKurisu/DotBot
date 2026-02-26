@@ -135,6 +135,9 @@ public sealed class WeComChannelService(
             await _webApp.StopAsync();
     }
 
+    /// <inheritdoc />
+    public IReadOnlyList<string> GetAdminTargets() => [""];
+
     public Task DeliverMessageAsync(string target, string content)
     {
         // Prefer the per-chat webhook URL cached at runtime from incoming messages.
