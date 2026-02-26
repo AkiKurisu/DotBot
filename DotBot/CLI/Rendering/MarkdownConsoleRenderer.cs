@@ -132,8 +132,13 @@ internal static partial class MarkdownConsoleRenderer
                     {
                         RenderCodeLine(remaining);
                     }
+                    else if (IsTableLine(remaining))
+                    {
+                        _tableBuffer.Add(remaining);
+                    }
                     else
                     {
+                        FlushTableBuffer();
                         RenderMarkdownLine(remaining);
                     }
                     return;
