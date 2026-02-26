@@ -69,7 +69,7 @@ public sealed partial class CustomCommandLoader(string workspaceRoot)
     /// </summary>
     public void DeployBuiltInCommands()
     {
-        const string resourcePrefix = "DotBot.Commands.CustomCommands.BuiltIn.";
+        const string resourcePrefix = "DotBot.Commands.Custom.BuiltIn.";
         const string markerFile = ".builtin_commands";
 
         var assembly = Assembly.GetExecutingAssembly();
