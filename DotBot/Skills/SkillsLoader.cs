@@ -273,7 +273,7 @@ public sealed class SkillsLoader(string workspaceRoot)
         if (content == null || !content.StartsWith("---"))
             return null;
 
-        var match = Regex.Match(content, @"^---\n(.*?)\n---", RegexOptions.Singleline);
+        var match = Regex.Match(content, @"^---\r?\n(.*?)\r?\n---", RegexOptions.Singleline);
         if (!match.Success)
             return null;
 
@@ -306,7 +306,7 @@ public sealed class SkillsLoader(string workspaceRoot)
         if (!content.StartsWith("---"))
             return content;
 
-        var match = Regex.Match(content, @"^---\n.*?\n---\n", RegexOptions.Singleline);
+        var match = Regex.Match(content, @"^---\r?\n.*?\r?\n---\r?\n", RegexOptions.Singleline);
         return match.Success ? content[match.Length..].Trim() : content;
     }
 
