@@ -137,10 +137,14 @@ public sealed class WeComChannelService(
 
     public Task DeliverMessageAsync(string target, string content)
     {
-        // WeCom delivery uses the outgoing webhook URL (no per-target routing in bot webhook mode)
-        if (!string.IsNullOrWhiteSpace(config.WeCom.WebhookUrl))
+        // Prefer the per-chat webhook URL cached at runtime from incoming messages.
+        // Fall back to the global config webhook if the target chatId hasn't been seen yet.
+        var webhookUrl = (!string.IsNullOrWhiteSpace(target) ? registry.GetWebhookUrl(target) : null)
+            ?? config.WeCom.WebhookUrl;
+
+        if (!string.IsNullOrWhiteSpace(webhookUrl))
         {
-            var wecomTools = new WeComTools(config.WeCom.WebhookUrl);
+            var wecomTools = new WeComTools(webhookUrl);
             return wecomTools.SendTextAsync(content);
         }
         return Task.CompletedTask;

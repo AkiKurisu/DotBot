@@ -441,11 +441,12 @@ Cron 是一个定时任务调度系统，支持一次性和周期性任务。任
 
 Cron 任务支持多种投递渠道（需在创建任务时设置 `deliver: true`）：
 
-| 渠道参数 | 说明 | 前置条件 |
-|----------|------|----------|
-| `channel: "<群号>"` | 投递到指定 QQ 群 | QQ Bot 模式 |
-| `to: "<QQ号>"` | 投递到指定 QQ 私聊 | QQ Bot 模式 |
-| `channel: "wecom"` | 投递到企业微信群 | 启用 WeCom 配置 |
+| `channel` | `to` | 说明 | 前置条件 |
+|-----------|------|------|----------|
+| `"qq"` | `"group:<群号>"` | 投递到指定 QQ 群 | QQ Bot 模式 |
+| `"qq"` | `"<QQ号>"` | 投递到指定 QQ 私聊 | QQ Bot 模式 |
+| `"wecom"` | `"<ChatId>"` | 投递到企业微信指定群 | WeCom Bot 模式 |
+| `"wecom"` | 不填 | 投递到企业微信（全局 Webhook） | 启用 `WeCom` 配置 |
 
 ### Agent 自助创建任务
 
@@ -707,7 +708,7 @@ Gateway 模式下，Cron 任务的 `deliver` 功能通过 `channel` 字段路由
 | `channel` 值 | 投递目标 | 示例 `to` |
 |---|---|---|
 | `"qq"` | QQ 私聊（`to` 为 QQ 号）或群聊（`to` 为群号加 `group:` 前缀） | `"123456789"` / `"group:98765432"` |
-| `"wecom"` | 企业微信 Webhook 推送 | 无需设置 |
+| `"wecom"` | 企业微信指定群（`to` 为 ChatId）；不填 `to` 则回退到全局 `WeCom.WebhookUrl` | `"wrxxxxxxxx"` |
 | `"api"` | API Channel 无主动投递能力，忽略 | — |
 
 ### Heartbeat 跨 Channel 通知

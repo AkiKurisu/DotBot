@@ -13,6 +13,9 @@ public class WeComBotRegistry
     
     private readonly ConcurrentDictionary<string, WeComBizMsgCrypt> _crypts = new();
 
+    // Runtime cache: chatId -> webhookUrl (populated as messages arrive)
+    private readonly ConcurrentDictionary<string, string> _webhookUrlCache = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
     /// Register a bot with its crypto credentials.
     /// Call <see cref="SetHandlers"/> separately to attach message handlers.
@@ -62,6 +65,21 @@ public class WeComBotRegistry
     public bool Exists(string path) => _entries.ContainsKey(path);
 
     public IEnumerable<string> GetAllPaths() => _entries.Keys;
+
+    /// <summary>
+    /// Cache a chatId -> webhookUrl mapping observed from an incoming message.
+    /// </summary>
+    public void CacheWebhookUrl(string chatId, string webhookUrl)
+    {
+        if (!string.IsNullOrEmpty(chatId) && !string.IsNullOrEmpty(webhookUrl))
+            _webhookUrlCache[chatId] = webhookUrl;
+    }
+
+    /// <summary>
+    /// Retrieve the cached webhook URL for a given chatId, or null if not yet seen.
+    /// </summary>
+    public string? GetWebhookUrl(string chatId)
+        => _webhookUrlCache.GetValueOrDefault(chatId);
 
     private static string NormalizePath(string path)
     {

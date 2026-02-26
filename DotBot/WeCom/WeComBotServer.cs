@@ -169,6 +169,8 @@ public class WeComBotServer(WeComBotRegistry registry, HttpClient? httpClient = 
             return;
         }
 
+        _registry.CacheWebhookUrl(message.ChatId, message.WebhookUrl);
+
         var pusher = new WeComPusher(message.ChatId, message.WebhookUrl, _httpClient);
         var responseText = await handlers.EventHandler(
             message.Event?.EventType ?? "",
@@ -192,6 +194,7 @@ public class WeComBotServer(WeComBotRegistry registry, HttpClient? httpClient = 
         var webhookUrl = !string.IsNullOrEmpty(message.WebhookUrl) ? message.WebhookUrl
             : !string.IsNullOrEmpty(message.ResponseUrl) ? message.ResponseUrl
             : "";
+        _registry.CacheWebhookUrl(message.ChatId, webhookUrl);
         var pusher = new WeComPusher(message.ChatId, webhookUrl, _httpClient);
 
         if (message.MsgType == WeComMsgType.Voice && handlers.TextHandler != null)

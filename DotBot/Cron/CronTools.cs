@@ -25,8 +25,8 @@ public sealed class CronTools(CronService cronService)
         [Description("Display name for the job. Optional, only used when action is 'add'.")] string? name = null,
         [Description("The ID of the job to delete. Required when action is 'remove'. Use action 'list' first to get job IDs.")] string? jobId = null,
         [Description("Whether to deliver results after the job runs. Defaults to true. Results are sent to the task creator unless 'channel' or 'toUser' overrides the target. Only used when action is 'add'.")] bool deliver = true,
-        [Description("Override delivery target: a QQ group ID (number) or 'wecom' to send via WeCom webhook. Optional, only used when action is 'add'.")] string? channel = null,
-        [Description("Override delivery target: a QQ user ID to send as private message. Optional, only used when action is 'add'.")] string? toUser = null)
+        [Description("The channel to deliver results to. Use 'qq' for QQ (group or private), 'wecom' for WeCom. Optional, auto-detected from current chat context when not specified.")] string? channel = null,
+        [Description("The delivery target within the channel. For QQ: 'group:<groupId>' for group chat, or a plain user ID for private chat. For WeCom: the ChatId of the target group. Optional, auto-detected from current chat context when not specified.")] string? toUser = null)
     {
         if (string.IsNullOrWhiteSpace(action))
             return JsonSerializer.Serialize(new { error = "Parameter 'action' is required. Must be one of: 'add', 'list', 'remove'." });
@@ -78,7 +78,9 @@ public sealed class CronTools(CronService cronService)
                     {
                         payload.CreatorGroupId = qqContext.GroupId.ToString();
                         if (payload.Channel == null)
-                            payload.Channel = qqContext.GroupId.ToString();
+                            payload.Channel = "qq";
+                        if (payload.To == null)
+                            payload.To = $"group:{qqContext.GroupId}";
                     }
                 }
                 else
@@ -88,6 +90,11 @@ public sealed class CronTools(CronService cronService)
                     {
                         payload.CreatorId = wecomContext.UserId;
                         payload.CreatorSource = "wecom";
+                        payload.CreatorGroupId = wecomContext.ChatId;
+                        if (payload.Channel == null)
+                            payload.Channel = "wecom";
+                        if (payload.To == null)
+                            payload.To = wecomContext.ChatId;
                     }
                     else
                     {
