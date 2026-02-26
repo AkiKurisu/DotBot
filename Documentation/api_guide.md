@@ -38,9 +38,6 @@ Endpoints (OpenAI-compatible):
   POST /dotbot/v1/chat/completions
 Additional endpoints:
   GET  /v1/health
-  GET  /v1/tools
-  GET  /v1/sessions
-  DELETE /v1/sessions/{id}
 All tools enabled (9 tools)
 Press Ctrl+C to stop...
 ```
@@ -105,8 +102,6 @@ Authorization: Bearer your-api-access-key
 ```
 
 未通过认证的请求会返回 `401 Unauthorized`。
-
-辅助端点（`/v1/health`、`/v1/tools`、`/v1/sessions`）也需要认证（`/v1/health` 除外）。
 
 ### 禁用认证
 

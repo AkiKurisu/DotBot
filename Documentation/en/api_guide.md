@@ -38,9 +38,6 @@ Endpoints (OpenAI-compatible):
   POST /dotbot/v1/chat/completions
 Additional endpoints:
   GET  /v1/health
-  GET  /v1/tools
-  GET  /v1/sessions
-  DELETE /v1/sessions/{id}
 All tools enabled (9 tools)
 Press Ctrl+C to stop...
 ```
@@ -112,8 +109,6 @@ Authorization: Bearer your-api-access-key
 ```
 
 Unauthenticated requests will return `401 Unauthorized`.
-
-Auxiliary endpoints (`/v1/health`, `/v1/tools`, `/v1/sessions`) also require authentication (`/v1/health` is exempt).
 
 ### Disabling Authentication
 
