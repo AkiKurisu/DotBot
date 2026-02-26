@@ -2,6 +2,7 @@ using System.Reflection;
 using DotBot.Abstractions;
 using DotBot.Agents;
 using DotBot.Api;
+using DotBot.Commands.Custom;
 using DotBot.Configuration;
 using DotBot.Cron;
 using DotBot.DashBoard;
@@ -243,7 +244,8 @@ public sealed class GatewayHost : IDotBotHost
                 TraceCollector = traceCollector,
                 ChannelClient = channelClient
             },
-            traceCollector: traceCollector);
+            traceCollector: traceCollector,
+            customCommandLoader: _sp.GetService<CustomCommandLoader>());
 
         var agent = agentFactory.CreateDefaultAgent();
         var sessionGate = _sp.GetRequiredService<SessionGate>();

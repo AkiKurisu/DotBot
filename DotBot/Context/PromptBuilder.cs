@@ -1,3 +1,4 @@
+using DotBot.Commands.Custom;
 using DotBot.Memory;
 using DotBot.Skills;
 
@@ -6,7 +7,8 @@ namespace DotBot.Context;
 /// <summary>
 /// Builds the complete system prompt from memory, skills, and configuration.
 /// </summary>
-public sealed class PromptBuilder(MemoryStore memoryStore, SkillsLoader skillsLoader, string cortexBotPath, string workspacePath, string baseInstructions)
+public sealed class PromptBuilder(MemoryStore memoryStore, SkillsLoader skillsLoader, string cortexBotPath, string workspacePath,
+    string baseInstructions, CustomCommandLoader? customCommandLoader = null)
 {
     private readonly string _cortexBotPath = Path.GetFullPath(cortexBotPath);
 
@@ -71,6 +73,14 @@ The following skills extend your capabilities. To use a skill, read its SKILL.md
 {skillsSummary}
 """
                 );
+        }
+
+        // Custom commands summary
+        if (customCommandLoader != null)
+        {
+            var commandsSummary = customCommandLoader.BuildCommandsSummary();
+            if (!string.IsNullOrWhiteSpace(commandsSummary))
+                parts.Add(commandsSummary);
         }
 
         foreach (var provider in ChatContextRegistry.All)

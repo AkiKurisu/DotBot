@@ -5,6 +5,7 @@ using DotBot.Agents;
 using DotBot.CLI;
 using DotBot.Commands.ChannelAdapters;
 using DotBot.Commands.Core;
+using DotBot.Commands.Custom;
 using DotBot.Context;
 using DotBot.Cron;
 using DotBot.DashBoard;
@@ -56,7 +57,8 @@ public sealed class WeComChannelAdapter : IAsyncDisposable
         CronService? cronService = null,
         AgentFactory? agentFactory = null,
         TraceCollector? traceCollector = null,
-        TokenUsageStore? tokenUsageStore = null)
+        TokenUsageStore? tokenUsageStore = null,
+        CustomCommandLoader? customCommandLoader = null)
     {
         _agent = agent;
         _sessionStore = sessionStore;
@@ -69,8 +71,7 @@ public sealed class WeComChannelAdapter : IAsyncDisposable
         _traceCollector = traceCollector;
         _tokenUsageStore = tokenUsageStore;
         
-        // Initialize command dispatcher with built-in handlers
-        _commandDispatcher = CommandDispatcher.CreateDefault();
+        _commandDispatcher = CommandDispatcher.CreateDefault(customCommandLoader);
 
         // Attach handlers to all registered bot paths
         foreach (var path in registry.GetAllPaths())
@@ -112,8 +113,11 @@ public sealed class WeComChannelAdapter : IAsyncDisposable
         }
 
         // Handle slash commands
-        if (await HandleCommandAsync(pusher, plainText, sessionId))
+        var cmdResult = await HandleCommandAsync(pusher, plainText, sessionId);
+        if (cmdResult.Handled && cmdResult.ExpandedPrompt == null)
             return;
+        if (cmdResult.ExpandedPrompt != null)
+            plainText = cmdResult.ExpandedPrompt;
 
         // Get user role from permission service
         var userRole = _permissionService.GetUserRole(from.UserId, chatId);
@@ -320,9 +324,8 @@ public sealed class WeComChannelAdapter : IAsyncDisposable
 
     #region Commands
 
-    private async Task<bool> HandleCommandAsync(IWeComPusher pusher, string text, string sessionId)
+    private async Task<CommandResult> HandleCommandAsync(IWeComPusher pusher, string text, string sessionId)
     {
-        // Get user info from context
         var chatContext = WeComChatContextScope.Current;
         var userId = chatContext?.UserId ?? "";
         var userName = chatContext?.UserName ?? "";

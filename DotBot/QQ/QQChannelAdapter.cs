@@ -6,6 +6,7 @@ using DotBot.Agents;
 using DotBot.CLI;
 using DotBot.Commands.ChannelAdapters;
 using DotBot.Commands.Core;
+using DotBot.Commands.Custom;
 using DotBot.Context;
 using DotBot.Cron;
 using DotBot.DashBoard;
@@ -59,7 +60,8 @@ public sealed class QQChannelAdapter : IAsyncDisposable
         CronService? cronService = null,
         AgentFactory? agentFactory = null,
         TraceCollector? traceCollector = null,
-        TokenUsageStore? tokenUsageStore = null)
+        TokenUsageStore? tokenUsageStore = null,
+        CustomCommandLoader? customCommandLoader = null)
     {
         _client = client;
         _agent = agent;
@@ -73,8 +75,7 @@ public sealed class QQChannelAdapter : IAsyncDisposable
         _traceCollector = traceCollector;
         _tokenUsageStore = tokenUsageStore;
         
-        // Initialize command dispatcher with built-in handlers
-        _commandDispatcher = CommandDispatcher.CreateDefault();
+        _commandDispatcher = CommandDispatcher.CreateDefault(customCommandLoader);
 
         _client.OnGroupMessage += HandleGroupMessageAsync;
         _client.OnPrivateMessage += HandlePrivateMessageAsync;
@@ -144,8 +145,11 @@ public sealed class QQChannelAdapter : IAsyncDisposable
     {
         var sessionId = $"qq_{evt.GetSessionId()}";
 
-        if (await HandleCommandAsync(evt, plainText, sessionId))
+        var cmdResult = await HandleCommandAsync(evt, plainText, sessionId);
+        if (cmdResult.Handled && cmdResult.ExpandedPrompt == null)
             return;
+        if (cmdResult.ExpandedPrompt != null)
+            plainText = cmdResult.ExpandedPrompt;
 
         var approvalContext = new ApprovalContext
         {
@@ -311,7 +315,7 @@ public sealed class QQChannelAdapter : IAsyncDisposable
         LogOutgoing(evt, text);
     }
 
-    private async Task<bool> HandleCommandAsync(OneBotMessageEvent evt, string text, string sessionId)
+    private async Task<CommandResult> HandleCommandAsync(OneBotMessageEvent evt, string text, string sessionId)
     {
         var role = _permissionService.GetUserRole(evt.UserId, evt.GroupId);
         var context = new CommandContext

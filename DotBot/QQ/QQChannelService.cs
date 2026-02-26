@@ -1,6 +1,7 @@
 using System.ClientModel;
 using DotBot.Abstractions;
 using DotBot.Agents;
+using DotBot.Commands.Custom;
 using DotBot.Configuration;
 using DotBot.Cron;
 using DotBot.DashBoard;
@@ -84,7 +85,8 @@ public sealed class QQChannelService(
                 TraceCollector = traceCollector,
                 ChannelClient = qqClient
             },
-            traceCollector: traceCollector);
+            traceCollector: traceCollector,
+            customCommandLoader: sp.GetService<CustomCommandLoader>());
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -95,6 +97,7 @@ public sealed class QQChannelService(
         var tokenUsageStore = sp.GetService<TokenUsageStore>();
 
         var sessionGate = sp.GetRequiredService<SessionGate>();
+        var customCommandLoader = sp.GetService<CustomCommandLoader>();
         _adapter = new QQChannelAdapter(
             qqClient, agent, sessionStore,
             permissionService, sessionGate, qqApprovalService,
@@ -102,7 +105,8 @@ public sealed class QQChannelService(
             cronService: CronService,
             agentFactory: agentFactory,
             traceCollector: traceCollector,
-            tokenUsageStore: tokenUsageStore);
+            tokenUsageStore: tokenUsageStore,
+            customCommandLoader: customCommandLoader);
 
         await qqClient.StartAsync(cancellationToken);
 

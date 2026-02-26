@@ -50,8 +50,8 @@ public static class StatusPanel
             new Markup($"[grey]{Strings.CmdLoad(lang)}[/]"),
             new Markup("[blue]/config[/]"),
             new Markup($"[grey]{Strings.CmdConfig(lang)}[/]"),
-            new Markup("[blue]/sessions[/]"),
-            new Markup($"[grey]{Strings.CmdSessions(lang)}[/]"));
+            new Markup("[blue]/commands[/]"),
+            new Markup($"[grey]{Strings.CmdCommands(lang)}[/]"));
 
         var panel = new Panel(grid)
         {
@@ -219,6 +219,7 @@ public static class StatusPanel
         grid.AddRow("  /cron list", Strings.CmdCronList(lang));
         grid.AddRow("  /cron remove <id>", Strings.CmdCronRemove(lang));
         grid.AddRow("  /cron enable|disable <id>", Strings.CmdCronToggle(lang));
+        grid.AddRow("  /commands", Strings.CmdCommands(lang));
         grid.AddRow("", "");
         grid.AddRow(new Markup($"[yellow]{Strings.UsageTips(lang)}:[/]"), new Markup(""));
         grid.AddRow($"  • {Strings.TipDirectInput(lang)}", "");

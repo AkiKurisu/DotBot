@@ -21,10 +21,22 @@ public sealed class CommandResult
     public bool IsMarkdown { get; init; }
     
     /// <summary>
+    /// When set, the command was a custom command that expanded into a prompt.
+    /// The caller should feed this prompt to the agent instead of replying directly.
+    /// </summary>
+    public string? ExpandedPrompt { get; init; }
+    
+    /// <summary>
     /// Creates a result indicating the command was handled.
     /// </summary>
     public static CommandResult HandledResult(string? message = null, bool isMarkdown = false)
         => new() { Handled = true, Message = message, IsMarkdown = isMarkdown };
+    
+    /// <summary>
+    /// Creates a result indicating the command expanded into an agent prompt.
+    /// </summary>
+    public static CommandResult PromptExpansion(string expandedPrompt)
+        => new() { Handled = true, ExpandedPrompt = expandedPrompt };
     
     /// <summary>
     /// Creates a result indicating the command was not handled.

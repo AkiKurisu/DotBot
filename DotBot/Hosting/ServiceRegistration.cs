@@ -1,3 +1,4 @@
+using DotBot.Commands.Custom;
 using DotBot.Configuration;
 using DotBot.Cron;
 using DotBot.DashBoard;
@@ -33,6 +34,11 @@ public static class ServiceRegistration
         var skillsLoader = new SkillsLoader(botPath);
         skillsLoader.DeployBuiltInSkills();
         services.AddSingleton(skillsLoader);
+
+        var customCommandLoader = new CustomCommandLoader(botPath);
+        customCommandLoader.DeployBuiltInCommands();
+        services.AddSingleton(customCommandLoader);
+
         services.AddSingleton(new LanguageService(config.Language));
 
         var cronStorePath = Path.Combine(botPath, config.Cron.StorePath);
