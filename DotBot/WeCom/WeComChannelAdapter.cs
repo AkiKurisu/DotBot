@@ -194,6 +194,8 @@ public sealed class WeComChannelAdapter : IAsyncDisposable
                                     break;
 
                                 case UsageContent usage:
+                                    await FlushTextBufferAsync(pusher, textBuffer);
+                                    
                                     if (usage.Details.InputTokenCount.HasValue)
                                         inputTokens = usage.Details.InputTokenCount.Value;
                                     if (usage.Details.OutputTokenCount.HasValue)
