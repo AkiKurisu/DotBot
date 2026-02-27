@@ -1,15 +1,18 @@
-# 工作区
+# Workspace
 
-该文件夹用于 Clone 源代码到云服务器时直接作为 DotBot 的工作区使用。
+This folder is used directly as the DotBot workspace when cloning source code to the cloud server.
+
+## Quick Start
 
 ```shell
 cd DotBot/Workspace
 
-bash start_linux.sh
+screen -dmS dotbot bash -c "bash start.sh"
 ```
 
-## 测试
+## QQBot
 
-开发者可以将需要测试、验证的功能用文本文件的形式放在工作区中让 DotBot 读取。
-
-`test_subagent.txt` 为测试 SubAgent 功能的示例。
+```shell
+screen -dmS napcat bash -c "napcat"
+screen -dmS dotbot bash -c "bash start.sh"
+```

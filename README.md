@@ -47,6 +47,94 @@
 
 <div align="center">Dashboard monitors usage and session history</div>
 
+## 🏗️ Architecture
+
+```mermaid
+flowchart TB
+    subgraph channels [Channels]
+        CLI[CLI REPL]
+        QQ[QQ Bot]
+        WeCom[WeCom Bot]
+        API[API Service]
+    end
+
+    subgraph gateway [Gateway]
+        MsgRouter[MessageRouter]
+        SessGate[SessionGate]
+    end
+
+    subgraph core [Core]
+        AgentFactory[AgentFactory]
+        AgentRunner[AgentRunner]
+        PromptBuilder[PromptBuilder]
+    end
+
+    subgraph workspace [Workspace]
+        SessionStore["SessionStore (per-channel isolated)"]
+        MemoryStore["MemoryStore (shared)"]
+        Skills[Skills]
+        Commands[Commands]
+        Config[appsettings.json]
+    end
+
+    subgraph tools [Tools]
+        FileTools[File R/W]
+        ShellTools[Shell]
+        WebTools[Web]
+        SubAgent[SubAgent]
+        MCPServers[MCP Servers]
+    end
+
+    channels -->|requests| gateway
+    gateway --> core
+    core --> workspace
+    core --> tools
+    MsgRouter -->|route delivery| channels
+
+    classDef channelStyle fill:#dbeafe,stroke:#3b82f6,color:#1e3a5f
+    classDef gatewayStyle fill:#fef3c7,stroke:#f59e0b,color:#78350f
+    classDef coreStyle fill:#ede9fe,stroke:#8b5cf6,color:#3b0764
+    classDef workspaceStyle fill:#d1fae5,stroke:#10b981,color:#064e3b
+    classDef toolStyle fill:#fee2e2,stroke:#ef4444,color:#7f1d1d
+
+    class CLI,QQ,WeCom,API channelStyle
+    class MsgRouter,SessGate gatewayStyle
+    class AgentFactory,AgentRunner,PromptBuilder coreStyle
+    class SessionStore,MemoryStore,Skills,Commands,Config workspaceStyle
+    class FileTools,ShellTools,WebTools,SubAgent,MCPServers toolStyle
+```
+
+## 🧬 Design
+
+### Session Isolation Between Channels
+
+Each channel derives its own session ID so conversations never collide:
+
+- **QQ**: `qq_{groupId}` (group chat) or `qq_{userId}` (private chat)
+- **WeCom**: `wecom_{chatId}_{userId}`
+- **API**: resolved from `X-Session-Key` header, `user` field in body, or content fingerprint
+
+`SessionGate` provides per-session mutual exclusion — concurrent requests to the same session are serialized, while different sessions run fully in parallel. `MaxSessionQueueSize` controls how many requests can queue per session before the oldest is evicted.
+
+### Shared Workspace & Memory
+
+All channels running in Gateway mode share the **same workspace**:
+
+- **MemoryStore**: `memory/MEMORY.md` (structured long-term facts, always in context) + `memory/HISTORY.md` (append-only grep-searchable event log)
+- **File tools, Shell commands, Skills, and Commands** all operate within the same workspace directory
+- Knowledge learned through one channel (e.g., a QQ group conversation) is accessible from any other channel (e.g., WeCom)
+
+### Multi-Workspace Support
+
+DotBot uses a **two-level configuration** model:
+
+| Level | Path | Purpose |
+|-------|------|---------|
+| Global | `~/.bot/appsettings.json` | API keys, default model, shared settings |
+| Workspace | `<workspace>/.bot/appsettings.json` | Per-project overrides, channel config, MCP servers |
+
+Each workspace is a fully independent working directory with its own `.bot/` folder containing sessions, memory, skills, commands, and configuration. Run multiple DotBot instances pointed at different workspace directories for complete isolation.
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -91,7 +179,7 @@ cd Workspace
 dotbot
 ```
 
-### Runtime Modes
+### Enable Runtime Modes
 
 | Mode | Enable Condition | Usage |
 |------|------------------|-------|
@@ -99,6 +187,54 @@ dotbot
 | API Mode | `Api.Enabled = true` | OpenAI-compatible HTTP service |
 | QQ Bot | `QQBot.Enabled = true` | OneBot V11 protocol bot |
 | WeCom Bot | `WeComBot.Enabled = true` | WeChat Work bot |
+
+### Customizing with Bootstrap Files
+
+Place any of these files in `.bot/` to inject instructions into the agent's system prompt:
+
+| File | Purpose |
+|------|---------|
+| `AGENTS.md` | Project-specific agent behavior and conventions |
+| `SOUL.md` | Personality and tone guidelines |
+| `USER.md` | Information about the user |
+| `TOOLS.md` | Tool usage instructions and preferences |
+| `IDENTITY.md` | Custom identity override |
+
+**Example** — `.bot/AGENTS.md`:
+
+```markdown
+# Project Conventions
+
+- This is a C# .NET 10 project using minimal APIs
+- Always run `dotnet test` before committing
+- Follow the existing code style: file-scoped namespaces, primary constructors
+- Use Chinese for user-facing messages, English for code comments
+```
+
+### Custom Command Example
+
+Custom commands are markdown files in `.bot/commands/`. Users invoke them with `/command-name [args]`.
+
+**Example**:
+
+```markdown
+---
+description: Test subagent functionality by creating, listing, and verifying a file
+---
+
+Please test the subagent feature. Spawn a subagent to complete the following tasks:
+1. Create a test file `test_subagent_result.txt` in the workspace with content "Hello from Subagent! Time: " followed by the current time
+2. List the workspace root directory files to confirm the file was created
+3. Read the created file and verify the content is correct
+
+Report the subagent execution result when done.
+
+$ARGUMENTS
+```
+
+Invoke it with: `/test-subagent`
+
+Placeholders: `$ARGUMENTS` expands to the full argument string, `$1`, `$2`, etc. expand to positional arguments.
 
 ## 📚 Documentation
 
