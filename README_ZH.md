@@ -47,6 +47,94 @@
 
 <div align="center">DashBoard 监控用量和会话历史</div>
 
+## 🏗️ 架构
+
+```mermaid
+flowchart TB
+    subgraph channels [Channels]
+        CLI[CLI REPL]
+        QQ[QQ Bot]
+        WeCom[WeCom Bot]
+        API[API Service]
+    end
+
+    subgraph gateway [Gateway]
+        MsgRouter[MessageRouter]
+        SessGate[SessionGate]
+    end
+
+    subgraph core [Core]
+        AgentFactory[AgentFactory]
+        AgentRunner[AgentRunner]
+        PromptBuilder[PromptBuilder]
+    end
+
+    subgraph workspace [Workspace]
+        SessionStore["SessionStore (per-channel isolated)"]
+        MemoryStore["MemoryStore (shared)"]
+        Skills[Skills]
+        Commands[Commands]
+        Config[appsettings.json]
+    end
+
+    subgraph tools [Tools]
+        FileTools[File R/W]
+        ShellTools[Shell]
+        WebTools[Web]
+        SubAgent[SubAgent]
+        MCPServers[MCP Servers]
+    end
+
+    channels -->|requests| gateway
+    gateway --> core
+    core --> workspace
+    core --> tools
+    MsgRouter -->|route delivery| channels
+
+    classDef channelStyle fill:#dbeafe,stroke:#3b82f6,color:#1e3a5f
+    classDef gatewayStyle fill:#fef3c7,stroke:#f59e0b,color:#78350f
+    classDef coreStyle fill:#ede9fe,stroke:#8b5cf6,color:#3b0764
+    classDef workspaceStyle fill:#d1fae5,stroke:#10b981,color:#064e3b
+    classDef toolStyle fill:#fee2e2,stroke:#ef4444,color:#7f1d1d
+
+    class CLI,QQ,WeCom,API channelStyle
+    class MsgRouter,SessGate gatewayStyle
+    class AgentFactory,AgentRunner,PromptBuilder coreStyle
+    class SessionStore,MemoryStore,Skills,Commands,Config workspaceStyle
+    class FileTools,ShellTools,WebTools,SubAgent,MCPServers toolStyle
+```
+
+## 🧬 设计
+
+### Channel 间的会话隔离
+
+每个 Channel 派生独立的会话 ID，对话互不干扰：
+
+- **QQ**：`qq_{groupId}`（群聊）或 `qq_{userId}`（私聊）
+- **WeCom**：`wecom_{chatId}_{userId}`
+- **API**：从请求头 `X-Session-Key`、Body 中的 `user` 字段或内容指纹中解析
+
+`SessionGate` 对每个会话提供互斥保护——同一会话的并发请求将被串行化，不同会话则完全并行执行。`MaxSessionQueueSize` 控制每个会话的最大排队请求数，超出时最旧的请求将被丢弃。
+
+### 共享工作区与记忆
+
+在 Gateway 模式下，所有 Channel 共享**同一个工作区**：
+
+- **MemoryStore**：`memory/MEMORY.md`（结构化长期记忆，始终在上下文中）+ `memory/HISTORY.md`（仅追加的可 grep 搜索的事件日志）
+- **文件工具、Shell 命令、技能和命令**均在同一工作区目录下运行
+- 通过某个 Channel（如 QQ 群）学到的知识，可在其他 Channel（如企业微信）中访问
+
+### 多工作区支持
+
+DotBot 采用**两级配置**模型：
+
+| 级别 | 路径 | 用途 |
+|------|------|------|
+| 全局 | `~/.bot/appsettings.json` | API Key、默认模型、共享设置 |
+| 工作区 | `<workspace>/.bot/appsettings.json` | 项目级覆盖、Channel 配置、MCP 服务器 |
+
+每个工作区都是完全独立的工作目录，拥有自己的 `.bot/` 文件夹，包含会话、记忆、技能、命令和配置。将多个 DotBot 实例指向不同的工作区目录，即可实现完全隔离。
+
 ## 🚀 快速开始
 
 ### 环境要求
@@ -91,7 +179,7 @@ cd Workspace
 dotbot
 ```
 
-### 运行模式
+### 启用运行模式
 
 | 模式 | 启用条件 | 用途 |
 |------|----------|------|
@@ -99,6 +187,54 @@ dotbot
 | API 模式 | `Api.Enabled = true` | OpenAI 兼容 HTTP 服务 |
 | QQ 机器人 | `QQBot.Enabled = true` | OneBot V11 协议机器人 |
 | 企业微信 | `WeComBot.Enabled = true` | 企业微信机器人 |
+
+### 使用 Bootstrap 文件进行自定义
+
+将以下任意文件放入 `.bot/` 目录，即可将自定义指令注入到智能体的系统提示词中：
+
+| 文件 | 用途 |
+|------|------|
+| `AGENTS.md` | 项目专属的智能体行为与规范 |
+| `SOUL.md` | 个性风格与语气指南 |
+| `USER.md` | 用户相关信息 |
+| `TOOLS.md` | 工具使用说明与偏好 |
+| `IDENTITY.md` | 自定义身份覆盖 |
+
+**示例** — `.bot/AGENTS.md`：
+
+```markdown
+# Project Conventions
+
+- This is a C# .NET 10 project using minimal APIs
+- Always run `dotnet test` before committing
+- Follow the existing code style: file-scoped namespaces, primary constructors
+- Use Chinese for user-facing messages, English for code comments
+```
+
+### 自定义命令示例
+
+自定义命令是存放在 `.bot/commands/` 目录中的 Markdown 文件，用户通过 `/命令名 [参数]` 的方式调用。
+
+**示例**：
+
+```markdown
+---
+description: Test subagent functionality by creating, listing, and verifying a file
+---
+
+Please test the subagent feature. Spawn a subagent to complete the following tasks:
+1. Create a test file `test_subagent_result.txt` in the workspace with content "Hello from Subagent! Time: " followed by the current time
+2. List the workspace root directory files to confirm the file was created
+3. Read the created file and verify the content is correct
+
+Report the subagent execution result when done.
+
+$ARGUMENTS
+```
+
+调用方式：`/test-subagent`
+
+占位符说明：`$ARGUMENTS` 展开为完整参数字符串，`$1`、`$2` 等依次展开为各位置参数。
 
 ## 📚 文档导航
 
