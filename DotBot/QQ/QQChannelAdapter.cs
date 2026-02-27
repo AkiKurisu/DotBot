@@ -217,6 +217,8 @@ public sealed class QQChannelAdapter : IAsyncDisposable
                                     LogToolResult(ImageContentSanitizingChatClient.DescribeResult(fr.Result));
                                     break;
                                 case UsageContent usage:
+                                    await FlushTextBufferAsync(evt, textBuffer);
+                                    
                                     if (usage.Details.InputTokenCount.HasValue)
                                         inputTokens = usage.Details.InputTokenCount.Value;
                                     if (usage.Details.OutputTokenCount.HasValue)
