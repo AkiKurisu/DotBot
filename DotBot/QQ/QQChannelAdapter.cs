@@ -204,10 +204,13 @@ public sealed class QQChannelAdapter : IAsyncDisposable
                                 case FunctionCallContent functionCall:
                                     await FlushTextBufferAsync(evt, textBuffer);
 
-                                    var icon = ToolIconRegistry.GetToolIcon(functionCall.Name);
-                                    var toolNotice = $"{icon} 正在调用: {functionCall.Name}...";
-                                    await _client.SendMessageAsync(evt, toolNotice);
-                                    LogOutgoing(evt, toolNotice);
+                                    if (DebugModeService.IsEnabled())
+                                    {
+                                        var icon = ToolIconRegistry.GetToolIcon(functionCall.Name);
+                                        var toolNotice = $"{icon} 正在调用: {functionCall.Name}...";
+                                        await _client.SendMessageAsync(evt, toolNotice);
+                                        LogOutgoing(evt, toolNotice);
+                                    }
                                     LogToolCall(functionCall.Name, functionCall.Arguments);
                                     break;
                                 case FunctionResultContent fr:

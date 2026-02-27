@@ -179,10 +179,13 @@ public sealed class WeComChannelAdapter : IAsyncDisposable
                                 case FunctionCallContent functionCall:
                                     await FlushTextBufferAsync(pusher, textBuffer);
 
-                                    var icon = ToolIconRegistry.GetToolIcon(functionCall.Name);
-                                    var toolNotice = $"{icon} 正在调用: {functionCall.Name}...";
-                                    await pusher.PushTextAsync(toolNotice);
-                                    LogOutgoing(chatId, toolNotice);
+                                    if (DebugModeService.IsEnabled())
+                                    {
+                                        var icon = ToolIconRegistry.GetToolIcon(functionCall.Name);
+                                        var toolNotice = $"{icon} 正在调用: {functionCall.Name}...";
+                                        await pusher.PushTextAsync(toolNotice);
+                                        LogOutgoing(chatId, toolNotice);
+                                    }
                                     LogToolCall(functionCall.Name, functionCall.Arguments);
                                     break;
 
