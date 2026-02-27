@@ -4,7 +4,6 @@ using DotBot.Configuration;
 using DotBot.Hosting;
 using DotBot.Modules;
 using DotBot.Security;
-using DotBot.Tools;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DotBot.CLI;
@@ -18,11 +17,7 @@ namespace DotBot.CLI;
 public sealed partial class CliModule : ModuleBase
 {
     /// <inheritdoc />
-    public override bool IsEnabled(AppConfig config)
-    {
-        // CLI is the fallback mode when no channel is active
-        return !config.QQBot.Enabled && !config.WeComBot.Enabled && !config.Api.Enabled && !config.Acp.Enabled;
-    }
+    public override bool IsEnabled(AppConfig config) => true;
 
     /// <inheritdoc />
     public override void ConfigureServices(IServiceCollection services, ModuleContext context)

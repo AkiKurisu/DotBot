@@ -9,11 +9,21 @@ using Spectre.Console;
 
 Console.OutputEncoding = Encoding.UTF8;
 
+var isAcpMode = args.Any(a => a.Equals("-acp", StringComparison.OrdinalIgnoreCase)
+                            || a.Equals("acp", StringComparison.OrdinalIgnoreCase));
+
 var workspacePath = Directory.GetCurrentDirectory();
 var botPath = Path.GetFullPath(".bot");
 
 if (!Directory.Exists(botPath))
 {
+    if (isAcpMode)
+    {
+        await Console.Error.WriteLineAsync($"DotBot workspace not found: {botPath}");
+        Environment.Exit(1);
+        return;
+    }
+
     // First, select language
     var selectedLanguage = InitHelper.SelectLanguage();
     var lang = new LanguageService(selectedLanguage);
@@ -56,6 +66,11 @@ if (!Directory.Exists(botPath))
 var configPath = Path.Combine(botPath, "appsettings.json");
 var config = AppConfig.LoadWithGlobalFallback(configPath);
 
+if (isAcpMode)
+{
+    config.Acp.Enabled = true;
+}
+
 // Create language service from config
 var languageService = new LanguageService(config.Language);
 
@@ -67,6 +82,13 @@ if (config.DebugMode)
 
 if (string.IsNullOrWhiteSpace(config.ApiKey))
 {
+    if (isAcpMode)
+    {
+        await Console.Error.WriteLineAsync("API Key not configured. Please set ApiKey in appsettings.json.");
+        Environment.Exit(1);
+        return;
+    }
+
     AnsiConsole.WriteLine();
     AnsiConsole.MarkupLine($"[yellow]⚠️  {languageService.GetString("API Key 未配置", "API Key not configured")}[/]");
     AnsiConsole.WriteLine();

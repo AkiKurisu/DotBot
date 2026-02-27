@@ -7,24 +7,15 @@ public static class AcpToolKindMapper
 {
     private static readonly Dictionary<string, string> ToolKindMap = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["read_file"] = AcpToolKind.Read,
         ["ReadFile"] = AcpToolKind.Read,
-        ["write_file"] = AcpToolKind.Edit,
         ["WriteFile"] = AcpToolKind.Edit,
-        ["edit_file"] = AcpToolKind.Edit,
         ["EditFile"] = AcpToolKind.Edit,
-        ["grep_files"] = AcpToolKind.Search,
         ["GrepFiles"] = AcpToolKind.Search,
-        ["find_files"] = AcpToolKind.Search,
         ["FindFiles"] = AcpToolKind.Search,
-        ["list_directory"] = AcpToolKind.Search,
-        ["exec"] = AcpToolKind.Execute,
+        ["ListDirectory"] = AcpToolKind.Search,
         ["Exec"] = AcpToolKind.Execute,
-        ["web_search"] = AcpToolKind.Fetch,
         ["WebSearch"] = AcpToolKind.Fetch,
-        ["web_fetch"] = AcpToolKind.Fetch,
         ["WebFetch"] = AcpToolKind.Fetch,
-        ["spawn_subagent"] = AcpToolKind.Think,
         ["SpawnSubagent"] = AcpToolKind.Think
     };
 
