@@ -111,12 +111,7 @@ public sealed class AcpHandler(
                 break;
 
             default:
-                // Check if this is a response to an outgoing request (e.g., permission)
-                if (request.Id != null && !request.IsNotification)
-                {
-                    HandlePossibleResponse(request);
-                }
-                else if (!request.IsNotification)
+                if (!request.IsNotification)
                 {
                     transport.SendError(request.Id, -32601, $"Method not found: {request.Method}");
                 }
@@ -414,24 +409,6 @@ public sealed class AcpHandler(
             logger?.LogEvent($"Session cancel requested: {p.SessionId}");
             AnsiConsole.MarkupLine($"[yellow][[ACP]][/] Cancelled session: {Markup.Escape(p.SessionId)}");
         }
-    }
-
-    private void HandlePossibleResponse(JsonRpcRequest request)
-    {
-        // Responses to our outgoing requests (e.g., permission) arrive as JSON-RPC
-        // with an id matching our request. The ACP transport reads everything as requests,
-        // so we check if the id matches a pending permission request.
-        if (request.Id?.ValueKind == JsonValueKind.Number)
-        {
-            var id = request.Id.Value.GetInt32();
-            if (request.Params.HasValue)
-            {
-                approvalService.HandlePermissionResponse(id, request.Params.Value);
-                return;
-            }
-        }
-
-        transport.SendError(request.Id, -32601, $"Method not found: {request.Method}");
     }
 
     // ───── Helper methods ─────

@@ -6,16 +6,22 @@ namespace DotBot.Acp;
 
 /// <summary>
 /// ACP-based approval service that sends permission requests to the editor client
-/// via the JSON-RPC requestPermission method.
+/// via the JSON-RPC session/request_permission method.
 /// </summary>
 public sealed class AcpApprovalService(AcpTransport transport) : IApprovalService
 {
-    private readonly ConcurrentDictionary<int, TaskCompletionSource<RequestPermissionResult>> _pendingRequests = new();
-    private int _nextRequestId;
     private string _sessionId = "";
 
     private readonly HashSet<string> _sessionApprovedOps = [];
     private readonly Lock _sessionLock = new();
+
+    // Maps the optionId strings sent in the request back to AcpPermissionKind constants.
+    private static readonly Dictionary<string, string> OptionIdToKind = new()
+    {
+        ["allow-once"]   = AcpPermissionKind.AllowOnce,
+        ["allow-always"] = AcpPermissionKind.AllowAlways,
+        ["reject-once"]  = AcpPermissionKind.RejectOnce,
+    };
 
     public void SetSessionId(string sessionId)
     {
@@ -45,10 +51,10 @@ public sealed class AcpApprovalService(AcpTransport transport) : IApprovalServic
             Status = AcpToolStatus.Pending
         };
 
-        var result = await SendPermissionRequestAsync(toolCall);
-        if (result == null) return false;
+        var kind = await SendPermissionRequestAsync(toolCall);
+        if (kind == null) return false;
 
-        switch (result.Kind)
+        switch (kind)
         {
             case AcpPermissionKind.AllowAlways:
                 lock (_sessionLock) { _sessionApprovedOps.Add($"file:{operation}:*"); }
@@ -76,10 +82,10 @@ public sealed class AcpApprovalService(AcpTransport transport) : IApprovalServic
             Status = AcpToolStatus.Pending
         };
 
-        var result = await SendPermissionRequestAsync(toolCall);
-        if (result == null) return false;
+        var kind = await SendPermissionRequestAsync(toolCall);
+        if (kind == null) return false;
 
-        switch (result.Kind)
+        switch (kind)
         {
             case AcpPermissionKind.AllowAlways:
                 lock (_sessionLock) { _sessionApprovedOps.Add("shell:*"); }
@@ -91,61 +97,47 @@ public sealed class AcpApprovalService(AcpTransport transport) : IApprovalServic
         }
     }
 
-    private async Task<RequestPermissionResult?> SendPermissionRequestAsync(AcpToolCallInfo toolCall)
+    /// <summary>
+    /// Sends a session/request_permission request and returns the resolved
+    /// <see cref="AcpPermissionKind"/> string, or null if cancelled/timed out.
+    /// </summary>
+    private async Task<string?> SendPermissionRequestAsync(AcpToolCallInfo toolCall)
     {
-        var requestId = Interlocked.Increment(ref _nextRequestId);
-        var tcs = new TaskCompletionSource<RequestPermissionResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _pendingRequests[requestId] = tcs;
+        var requestParams = new RequestPermissionParams
+        {
+            SessionId = _sessionId,
+            ToolCall = toolCall,
+            Options =
+            [
+                new PermissionOption { OptionId = "allow-once",   Name = "Allow once",   Kind = AcpPermissionKind.AllowOnce   },
+                new PermissionOption { OptionId = "allow-always", Name = "Allow always", Kind = AcpPermissionKind.AllowAlways },
+                new PermissionOption { OptionId = "reject-once",  Name = "Reject",       Kind = AcpPermissionKind.RejectOnce  },
+            ]
+        };
 
         try
         {
-            var requestParams = new RequestPermissionParams
-            {
-                SessionId = _sessionId,
-                ToolCall = toolCall,
-                Options =
-                [
-                    new PermissionOption { Kind = AcpPermissionKind.AllowOnce, Label = "Allow once" },
-                    new PermissionOption { Kind = AcpPermissionKind.AllowAlways, Label = "Allow always" },
-                    new PermissionOption { Kind = AcpPermissionKind.RejectOnce, Label = "Reject" }
-                ]
-            };
+            var resultElement = await transport.SendClientRequestAsync(
+                AcpMethods.RequestPermission,
+                requestParams,
+                timeout: TimeSpan.FromSeconds(120));
 
-            transport.SendRequest(requestId, AcpMethods.RequestPermission, requestParams);
+            var result = resultElement.Deserialize<RequestPermissionResult>();
+            if (result == null) return null;
 
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
-            await using var reg = cts.Token.Register(() => tcs.TrySetCanceled());
+            // "cancelled" outcome means the prompt turn was cancelled.
+            if (result.Outcome.Outcome == "cancelled") return null;
 
-            return await tcs.Task;
+            // Map the selected optionId back to a permission kind constant.
+            if (result.Outcome.OptionId != null &&
+                OptionIdToKind.TryGetValue(result.Outcome.OptionId, out var kind))
+                return kind;
+
+            return null;
         }
         catch (OperationCanceledException)
         {
             return null;
-        }
-        finally
-        {
-            _pendingRequests.TryRemove(requestId, out _);
-        }
-    }
-
-    /// <summary>
-    /// Called by the ACP handler when a response to a permission request is received.
-    /// </summary>
-    public void HandlePermissionResponse(int requestId, JsonElement resultElement)
-    {
-        if (!_pendingRequests.TryGetValue(requestId, out var tcs)) return;
-
-        try
-        {
-            var result = resultElement.Deserialize<RequestPermissionResult>();
-            if (result != null)
-                tcs.TrySetResult(result);
-            else
-                tcs.TrySetCanceled();
-        }
-        catch
-        {
-            tcs.TrySetCanceled();
         }
     }
 }

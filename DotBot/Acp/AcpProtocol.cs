@@ -472,17 +472,36 @@ public sealed class AcpToolCallInfo
 
 public sealed class PermissionOption
 {
+    [JsonPropertyName("optionId")]
+    public string OptionId { get; set; } = "";
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = "";
+
     [JsonPropertyName("kind")]
     public string Kind { get; set; } = "";
-
-    [JsonPropertyName("label")]
-    public string Label { get; set; } = "";
 }
 
+/// <summary>
+/// The top-level result returned by the Client for session/request_permission.
+/// </summary>
 public sealed class RequestPermissionResult
 {
-    [JsonPropertyName("kind")]
-    public string Kind { get; set; } = "";
+    [JsonPropertyName("outcome")]
+    public PermissionOutcome Outcome { get; set; } = new();
+}
+
+/// <summary>
+/// Describes the user's decision: either "selected" with an optionId or "cancelled".
+/// </summary>
+public sealed class PermissionOutcome
+{
+    [JsonPropertyName("outcome")]
+    public string Outcome { get; set; } = "";
+
+    [JsonPropertyName("optionId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? OptionId { get; set; }
 }
 
 // ───── ACP fs/readTextFile (Agent → Client) ─────

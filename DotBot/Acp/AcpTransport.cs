@@ -181,8 +181,9 @@ public sealed class AcpTransport(Stream input, Stream output) : IAsyncDisposable
     /// <summary>
     /// Sends a JSON-RPC request to the client and awaits the response.
     /// Used for Agent→Client method calls (fs/readTextFile, terminal/create, etc.).
+    /// An optional <paramref name="timeout"/> overrides the default 30-second limit.
     /// </summary>
-    public async Task<JsonElement> SendClientRequestAsync(string method, object? @params, CancellationToken ct = default)
+    public async Task<JsonElement> SendClientRequestAsync(string method, object? @params, CancellationToken ct = default, TimeSpan? timeout = null)
     {
         var id = Interlocked.Increment(ref _nextOutgoingId);
         var tcs = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -192,7 +193,7 @@ public sealed class AcpTransport(Stream input, Stream output) : IAsyncDisposable
         {
             SendRequest(id, method, @params);
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(TimeSpan.FromSeconds(30));
+            cts.CancelAfter(timeout ?? TimeSpan.FromSeconds(30));
             await using var reg = cts.Token.Register(() => tcs.TrySetCanceled());
             return await tcs.Task;
         }
