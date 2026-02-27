@@ -21,7 +21,7 @@ public sealed partial class CliModule : ModuleBase
     public override bool IsEnabled(AppConfig config)
     {
         // CLI is the fallback mode when no channel is active
-        return !config.QQBot.Enabled && !config.WeComBot.Enabled && !config.Api.Enabled;
+        return !config.QQBot.Enabled && !config.WeComBot.Enabled && !config.Api.Enabled && !config.Acp.Enabled;
     }
 
     /// <inheritdoc />

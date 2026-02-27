@@ -10,4 +10,6 @@ Read the DotBot documentation to get started quickly
 
 [WeCom Guide](./wecom_guide.md) - WeCom push notifications & bot mode
 
+[ACP Mode Guide](./config_guide.md#acp-mode-configuration) - Agent Client Protocol editor/IDE integration
+
 [DashBoard Debugging Tool Guide](./dash_board_guide.md) - Built-in Web debugging UI, Trace data viewer

@@ -26,7 +26,7 @@
 
 - 🛠️ **Tool Capabilities**: File read/write (workspace-scoped), controlled Shell commands, Web scraping, optional SubAgent delegation
 - 🔌 **MCP Integration**: Connect external tool services via [Model Context Protocol](https://modelcontextprotocol.io/)
-- 🎮 **Multiple Runtime Modes**: Local REPL, QQ Bot (OneBot V11), WeCom Bot, API Service (OpenAI-compatible), **Gateway multi-channel concurrent mode**
+- 🎮 **Multiple Runtime Modes**: Local REPL, QQ Bot (OneBot V11), WeCom Bot, API Service (OpenAI-compatible), **ACP Editor Integration**, **Gateway multi-channel concurrent mode**
 - 📊 **Dashboard**: Built-in Web UI for real-time monitoring of token usage, session history, and tool call traces
 - 🧩 **Skills System**: Dynamically load Skills from workspace
 - 📢 **Notification Push**: WeCom group bot and Webhook notifications
@@ -56,6 +56,7 @@ flowchart TB
         QQ[QQ Bot]
         WeCom[WeCom Bot]
         API[API Service]
+        ACP["ACP (Editor/IDE)"]
     end
 
     subgraph gateway [Gateway]
@@ -97,7 +98,7 @@ flowchart TB
     classDef workspaceStyle fill:#d1fae5,stroke:#10b981,color:#064e3b
     classDef toolStyle fill:#fee2e2,stroke:#ef4444,color:#7f1d1d
 
-    class CLI,QQ,WeCom,API channelStyle
+    class CLI,QQ,WeCom,API,ACP channelStyle
     class MsgRouter,SessGate gatewayStyle
     class AgentFactory,AgentRunner,PromptBuilder coreStyle
     class SessionStore,MemoryStore,Skills,Commands,Config workspaceStyle
@@ -113,6 +114,7 @@ Each channel derives its own session ID so conversations never collide:
 - **QQ**: `qq_{groupId}` (group chat) or `qq_{userId}` (private chat)
 - **WeCom**: `wecom_{chatId}_{userId}`
 - **API**: resolved from `X-Session-Key` header, `user` field in body, or content fingerprint
+- **ACP**: `acp_{sessionId}` (managed by the editor)
 
 `SessionGate` provides per-session mutual exclusion — concurrent requests to the same session are serialized, while different sessions run fully in parallel. `MaxSessionQueueSize` controls how many requests can queue per session before the oldest is evicted.
 
@@ -187,6 +189,7 @@ dotbot
 | API Mode | `Api.Enabled = true` | OpenAI-compatible HTTP service |
 | QQ Bot | `QQBot.Enabled = true` | OneBot V11 protocol bot |
 | WeCom Bot | `WeComBot.Enabled = true` | WeChat Work bot |
+| ACP Mode | `Acp.Enabled = true` | Editor/IDE integration ([ACP](https://agentclientprotocol.com/)) |
 
 ### Customizing with Bootstrap Files
 
@@ -244,6 +247,7 @@ Placeholders: `$ARGUMENTS` expands to the full argument string, `$1`, `$2`, etc.
 | [API Mode Guide](./Documentation/en/api_guide.md) | OpenAI-compatible API, tool filtering, SDK examples |
 | [QQ Bot Guide](./Documentation/en/qq_bot_guide.md) | NapCat / permissions / approval |
 | [WeCom Guide](./Documentation/en/wecom_guide.md) | WeCom push notifications / bot mode |
+| [ACP Mode Guide](./Documentation/en/config_guide.md#acp-mode-configuration) | Agent Client Protocol editor/IDE integration |
 | [DashBoard Guide](./Documentation/en/dash_board_guide.md) | Built-in Web debugging UI, Trace data viewer |
 | [Documentation Index](./Documentation/en/index.md) | Full documentation navigation |
 
@@ -260,6 +264,7 @@ Thanks to [Devin AI](https://devin.ai/) for providing free ACU credits to facili
 - [NapNeko/NapCatQQ](https://github.com/NapNeko/NapCatQQ)
 - [spectreconsole/spectre.console](https://github.com/spectreconsole/spectre.console)
 - [modelcontextprotocol/csharp-sdk](https://github.com/modelcontextprotocol/csharp-sdk)
+- [agentclientprotocol/agent-client-protocol](https://github.com/agentclientprotocol/agent-client-protocol)
 
 ## 📄 License
 
