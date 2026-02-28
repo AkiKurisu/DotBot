@@ -86,6 +86,7 @@ public sealed class ShellTools
             var psi = new ProcessStartInfo
             {
                 WorkingDirectory = cwd,
+                RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -105,7 +106,6 @@ public sealed class ShellTools
             else
             {
                 psi.FileName = "/bin/bash";
-                psi.RedirectStandardInput = true;
             }
 
             using var process = Process.Start(psi);
