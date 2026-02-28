@@ -22,6 +22,11 @@ public sealed class ConsoleApprovalService(ApprovalStore? store = null) : IAppro
     private static volatile IRenderControl? _renderControl;
 
     /// <summary>
+    /// Gets the current render control (for other components that need to pause rendering).
+    /// </summary>
+    public static IRenderControl? CurrentRenderControl => _renderControl;
+
+    /// <summary>
     /// Set the render control for the current thread (called by ReplHost before streaming)
     /// </summary>
     public static void SetRenderControl(IRenderControl? renderControl)

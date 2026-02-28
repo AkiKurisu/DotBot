@@ -27,12 +27,15 @@ public sealed class AcpHandler(
     string workspacePath,
     CustomCommandLoader? customCommandLoader = null,
     TraceCollector? traceCollector = null,
-    AcpLogger? logger = null)
+    AcpLogger? logger = null,
+    PlanStore? planStore = null)
 {
     private ClientCapabilities? _clientCapabilities;
     private AcpClientProxy? _clientProxy;
     private bool _initialized;
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _activePrompts = new();
+    private readonly ConcurrentDictionary<string, AgentModeManager> _sessionModes = new();
+    private readonly ConcurrentDictionary<string, AIAgent> _sessionAgents = new();
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -110,6 +113,10 @@ public sealed class AcpHandler(
                 HandleSessionCancel(request);
                 break;
 
+            case AcpMethods.SessionMode:
+                HandleSessionMode(request);
+                break;
+
             default:
                 if (!request.IsNotification)
                 {
@@ -169,6 +176,7 @@ public sealed class AcpHandler(
         var sessionId = $"acp:{SessionStore.GenerateSessionId()}";
 
         approvalService.SetSessionId(sessionId);
+        _sessionModes[sessionId] = new AgentModeManager();
 
         var result = new SessionNewResult
         {
@@ -200,7 +208,8 @@ public sealed class AcpHandler(
         approvalService.SetSessionId(sessionId);
 
         // Load the session to get chat history
-        var session = await sessionStore.LoadOrCreateAsync(agent, sessionId, ct);
+        var currentAgent = _sessionAgents.GetValueOrDefault(sessionId, agent);
+        var session = await sessionStore.LoadOrCreateAsync(currentAgent, sessionId, ct);
         var chatHistory = session.GetService<ChatHistoryProvider>();
 
         if (chatHistory is InMemoryChatHistoryProvider memoryProvider)
@@ -305,14 +314,14 @@ public sealed class AcpHandler(
                 sessionId, null,
                 agentFactory.LastCreatedTools?.Select(t => t.Name));
 
-            var session = await sessionStore.LoadOrCreateAsync(agent, sessionId, promptCts.Token);
-            var sb = new StringBuilder();
+            var currentAgent = _sessionAgents.GetValueOrDefault(sessionId, agent);
+            var session = await sessionStore.LoadOrCreateAsync(currentAgent, sessionId, promptCts.Token);
             long inputTokens = 0, outputTokens = 0, totalTokens = 0;
             var tokenTracker = agentFactory.GetOrCreateTokenTracker(sessionId);
 
             try
             {
-                await foreach (var update in agent.RunStreamingAsync(promptText, session, cancellationToken: promptCts.Token))
+                await foreach (var update in currentAgent.RunStreamingAsync(promptText, session, cancellationToken: promptCts.Token))
                 {
                     foreach (var content in update.Contents)
                     {
@@ -339,7 +348,6 @@ public sealed class AcpHandler(
 
                     if (!string.IsNullOrEmpty(update.Text))
                     {
-                        sb.Append(update.Text);
                         SendMessageChunk(sessionId, update.Text);
                     }
                 }
@@ -353,7 +361,16 @@ public sealed class AcpHandler(
             if (totalTokens == 0 && (inputTokens > 0 || outputTokens > 0))
                 totalTokens = inputTokens + outputTokens;
 
-            await sessionStore.SaveAsync(agent, session, sessionId, CancellationToken.None);
+            await sessionStore.SaveAsync(currentAgent, session, sessionId, CancellationToken.None);
+
+            // Send structured plan update whenever a plan exists (covers both
+            // plan creation in Plan mode and todo updates in Agent mode)
+            if (planStore != null && planStore.StructuredPlanExists(sessionId))
+            {
+                var structuredPlan = await planStore.LoadStructuredPlanAsync(sessionId);
+                if (structuredPlan != null)
+                    SendPlanUpdate(sessionId, structuredPlan);
+            }
 
             if (totalTokens > 0)
                 tokenTracker.Update(inputTokens, outputTokens);
@@ -422,6 +439,24 @@ public sealed class AcpHandler(
             {
                 SessionUpdate = AcpUpdateKind.AgentMessageChunk,
                 Content = new AcpContentBlock { Type = "text", Text = text }
+            }
+        });
+    }
+
+    private void SendPlanUpdate(string sessionId, StructuredPlan plan)
+    {
+        var content = new List<AcpContentBlock>
+        {
+            new() { Type = "text", Text = PlanStore.RenderPlanMarkdown(plan) }
+        };
+        transport.SendNotification(AcpMethods.SessionUpdate, new SessionUpdateParams
+        {
+            SessionId = sessionId,
+            Update = new AcpSessionUpdate
+            {
+                SessionUpdate = AcpUpdateKind.Plan,
+                Title = plan.Title,
+                Content = content
             }
         });
     }
@@ -505,7 +540,7 @@ public sealed class AcpHandler(
         });
     }
 
-    private static List<ConfigOption> BuildConfigOptions()
+    private static List<ConfigOption> BuildConfigOptions(string currentMode = "agent")
     {
         return
         [
@@ -514,13 +549,61 @@ public sealed class AcpHandler(
                 Id = "mode",
                 Name = "Mode",
                 Category = "mode",
-                CurrentValue = "agent",
+                CurrentValue = currentMode,
                 Options =
                 [
-                    new ConfigOptionValue { Value = "agent", Name = "Agent", Description = "Full agent mode with all tools" }
+                    new ConfigOptionValue { Value = "agent", Name = "Agent", Description = "Full agent mode with all tools" },
+                    new ConfigOptionValue { Value = "plan", Name = "Plan", Description = "Read-only planning mode" }
                 ]
             }
         ];
+    }
+
+    private void HandleSessionMode(JsonRpcRequest request)
+    {
+        if (!EnsureInitialized(request)) return;
+
+        var p = Deserialize<SessionModeParams>(request.Params);
+        if (p == null)
+        {
+            transport.SendError(request.Id, -32602, "Invalid params");
+            return;
+        }
+
+        var sessionId = p.SessionId;
+        var modeManager = _sessionModes.GetOrAdd(sessionId, _ => new AgentModeManager());
+
+        var newMode = p.Mode?.ToLowerInvariant() switch
+        {
+            "plan" => AgentMode.Plan,
+            _ => AgentMode.Agent
+        };
+
+        modeManager.SwitchMode(newMode);
+
+        // Rebuild the agent with mode-appropriate tools
+        var newAgent = agentFactory.CreateAgentForMode(newMode, modeManager);
+        _sessionAgents[sessionId] = newAgent;
+
+        // Respond and notify
+        transport.SendResponse(request.Id, new { mode = newMode.ToString().ToLower() });
+        SendModeUpdate(sessionId, newMode);
+
+        logger?.LogEvent($"Mode changed [session={sessionId}]: {newMode.ToString().ToLower()}");
+        AnsiConsole.MarkupLine($"[green][[ACP]][/] Mode changed to {newMode.ToString().ToLower()} [session={Markup.Escape(sessionId)}]");
+    }
+
+    private void SendModeUpdate(string sessionId, AgentMode mode)
+    {
+        transport.SendNotification(AcpMethods.SessionUpdate, new SessionUpdateParams
+        {
+            SessionId = sessionId,
+            Update = new AcpSessionUpdate
+            {
+                SessionUpdate = AcpUpdateKind.CurrentModeUpdate,
+                Content = new AcpContentBlock { Type = "text", Text = mode.ToString().ToLower() }
+            }
+        });
     }
 
     private static string ExtractPromptText(List<AcpContentBlock> prompt)

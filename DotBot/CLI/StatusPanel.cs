@@ -314,6 +314,62 @@ public static class StatusPanel
         return Strings.NoDescription(lang);
     }
 
+    public static void ShowPlanStatus(StructuredPlan plan)
+    {
+        AnsiConsole.WriteLine();
+
+        var titlePanel = new Panel(
+            plan.Overview.Length > 0
+                ? $"[white]{plan.Title.Escape()}[/]\n[grey]{plan.Overview.Escape()}[/]"
+                : $"[white]{plan.Title.Escape()}[/]")
+        {
+            Border = BoxBorder.None,
+            Padding = new Padding(1, 0)
+        };
+        AnsiConsole.Write(titlePanel);
+
+        if (plan.Todos.Count == 0)
+        {
+            AnsiConsole.MarkupLine("[grey]  (no tasks)[/]");
+            AnsiConsole.WriteLine();
+            return;
+        }
+
+        var table = new Table()
+            .Border(TableBorder.Rounded)
+            .BorderColor(Color.Grey);
+
+        table.AddColumn(new TableColumn("[grey]Status[/]").Width(12));
+        table.AddColumn(new TableColumn("[grey]ID[/]").Width(20));
+        table.AddColumn(new TableColumn("[grey]Task[/]"));
+
+        foreach (var todo in plan.Todos)
+        {
+            var (icon, label, color) = todo.Status switch
+            {
+                PlanTodoStatus.Completed  => ("✓", "done",    "green"),
+                PlanTodoStatus.InProgress => ("●", "working", "yellow"),
+                PlanTodoStatus.Cancelled  => ("✗", "skipped", "red"),
+                _                         => ("○", "pending", "grey")
+            };
+
+            table.AddRow(
+                $"[{color}]{icon} {label}[/]",
+                $"[grey]{todo.Id.Escape()}[/]",
+                todo.Content.Escape());
+        }
+
+        AnsiConsole.Write(table);
+
+        var completed = plan.Todos.Count(t => t.Status == PlanTodoStatus.Completed);
+        var cancelled = plan.Todos.Count(t => t.Status == PlanTodoStatus.Cancelled);
+        var total = plan.Todos.Count;
+        var active = total - cancelled;
+        var progressColor = completed == active && active > 0 ? "green" : "grey";
+        AnsiConsole.MarkupLine($"  [{progressColor}]{completed}/{active} completed[/]");
+        AnsiConsole.WriteLine();
+    }
+
     private static string Escape(this string text)
     {
         return Markup.Escape(text);

@@ -24,14 +24,18 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
     AgentFactory? agentFactory = null, McpClientManager? mcpClientManager = null,
     string? dashBoardUrl = null,
     LanguageService? languageService = null, TokenUsageStore? tokenUsageStore = null,
-    CustomCommandLoader? customCommandLoader = null)
+    CustomCommandLoader? customCommandLoader = null,
+    AgentModeManager? modeManager = null,
+    PlanStore? planStore = null)
 {
     private readonly AppConfig _config = config ?? new AppConfig();
     private readonly LanguageService _lang = languageService ?? new LanguageService();
+    private readonly AgentModeManager _modeManager = modeManager ?? new AgentModeManager();
 
     private string _currentSessionId = string.Empty;
     
     private AgentSession _agentSession = null!;
+    private AIAgent _currentAgent = agent;
 
     public async Task RunAsync(CancellationToken cancellationToken = default)
     {
@@ -40,11 +44,16 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
         ShowWelcomeScreen(_currentSessionId);
 
         // Load or create session
-        _agentSession = await sessionStore.LoadOrCreateAsync(agent, _currentSessionId, cancellationToken);
+        _agentSession = await sessionStore.LoadOrCreateAsync(_currentAgent, _currentSessionId, cancellationToken);
 
         while (true)
         {
-            var input = ReadInput(_currentSessionId);
+            var input = await ReadInputAsync(cancellationToken);
+            if (input == null)
+            {
+                // Tab was pressed -- mode already toggled, just re-loop for new prompt
+                continue;
+            }
             if (string.IsNullOrWhiteSpace(input))
             {
                 continue;
@@ -66,29 +75,141 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
             {
                 await TryCompactContextAsync(_currentSessionId, _agentSession, cancellationToken);
                 agentFactory?.TryConsolidateMemory(_agentSession, _currentSessionId);
-                await sessionStore.SaveAsync(agent, _agentSession, _currentSessionId, cancellationToken);
+                await sessionStore.SaveAsync(_currentAgent, _agentSession, _currentSessionId, cancellationToken);
             }
         }
 
         AnsiConsole.MarkupLine($"\n[blue]👋 {Strings.Goodbye(_lang)}[/]");
     }
 
-    private static string? ReadInput(string currentSessionId = "")
+    /// <summary>
+    /// Reads a line of input, intercepting Tab to toggle mode.
+    /// Returns null to signal a mode-switch (caller should re-print prompt and continue).
+    /// </summary>
+    private async Task<string?> ReadInputAsync(CancellationToken cancellationToken)
     {
-        PrintPrompt(currentSessionId);
-        return Console.ReadLine();
+        PrintPrompt();
+
+        // Each entry is one logical character (may be a surrogate pair for non-BMP codepoints).
+        var buffer = new List<string>();
+
+        while (true)
+        {
+            var keyInfo = await AnsiConsole.Console.Input.ReadKeyAsync(intercept: true, cancellationToken);
+            if (keyInfo is not { } key)
+                continue;
+
+            switch (key.Key)
+            {
+                case ConsoleKey.Tab:
+                    var next = _modeManager.CurrentMode == AgentMode.Plan
+                        ? AgentMode.Agent
+                        : AgentMode.Plan;
+                    AnsiConsole.WriteLine();
+                    SwitchToMode(next);
+                    return null;
+
+                case ConsoleKey.Enter:
+                    AnsiConsole.WriteLine();
+                    return string.Concat(buffer);
+
+                case ConsoleKey.Backspace:
+                    if (buffer.Count > 0)
+                    {
+                        var last = buffer[^1];
+                        buffer.RemoveAt(buffer.Count - 1);
+                        // Erase exactly as many terminal columns as the character occupies.
+                        var w = GetDisplayWidth(last);
+                        AnsiConsole.Write(new string('\b', w) + new string(' ', w) + new string('\b', w));
+                    }
+                    break;
+
+                default:
+                    if (key.KeyChar == '\0')
+                        break;
+
+                    string ch;
+                    if (char.IsHighSurrogate(key.KeyChar))
+                    {
+                        // Non-BMP character: wait for the paired low surrogate.
+                        var lowInfo = await AnsiConsole.Console.Input.ReadKeyAsync(intercept: true, cancellationToken);
+                        if (lowInfo is { } lowKey && char.IsLowSurrogate(lowKey.KeyChar))
+                            ch = new string([key.KeyChar, lowKey.KeyChar]);
+                        else
+                            break; // Malformed surrogate, skip.
+                    }
+                    else
+                    {
+                        ch = key.KeyChar.ToString();
+                    }
+
+                    buffer.Add(ch);
+                    AnsiConsole.Write(ch);
+                    break;
+            }
+        }
     }
 
-    private static void PrintPrompt(string currentSessionId)
+    /// <summary>
+    /// Returns the number of terminal columns occupied by the string.
+    /// Wide characters (CJK, full-width forms, etc.) count as 2 columns.
+    /// </summary>
+    private static int GetDisplayWidth(string s)
     {
-        var sessionDisplay = string.IsNullOrEmpty(currentSessionId) ? "" : $"[grey]({currentSessionId.EscapeMarkup()})[/]";
-        AnsiConsole.Markup($"[green]{sessionDisplay}> [/]");
+        var width = 0;
+        var i = 0;
+        while (i < s.Length)
+        {
+            int cp;
+            if (char.IsHighSurrogate(s[i]) && i + 1 < s.Length && char.IsLowSurrogate(s[i + 1]))
+            {
+                cp = char.ConvertToUtf32(s[i], s[i + 1]);
+                i += 2;
+            }
+            else
+            {
+                cp = s[i];
+                i++;
+            }
+            width += IsWideCodePoint(cp) ? 2 : 1;
+        }
+        return width;
+    }
+
+    private static bool IsWideCodePoint(int cp) =>
+        (cp >= 0x1100 && cp <= 0x115F) ||   // Hangul Jamo
+        cp is 0x2329 or 0x232A ||
+        (cp >= 0x2E80 && cp <= 0x303E) ||   // CJK Radicals / Kangxi
+        (cp >= 0x3040 && cp <= 0x33FF) ||   // Hiragana, Katakana, Bopomofo, CJK symbols
+        (cp >= 0x3400 && cp <= 0x4DBF) ||   // CJK Extension A
+        (cp >= 0x4E00 && cp <= 0xA4CF) ||   // CJK Unified Ideographs + Extension A end
+        (cp >= 0xA960 && cp <= 0xA97F) ||   // Hangul Jamo Extended-A
+        (cp >= 0xAC00 && cp <= 0xD7FF) ||   // Hangul Syllables
+        (cp >= 0xF900 && cp <= 0xFAFF) ||   // CJK Compatibility Ideographs
+        (cp >= 0xFE10 && cp <= 0xFE1F) ||   // Vertical Forms
+        (cp >= 0xFE30 && cp <= 0xFE4F) ||   // CJK Compatibility Forms
+        (cp >= 0xFF00 && cp <= 0xFF60) ||   // Fullwidth Latin / Katakana
+        (cp >= 0xFFE0 && cp <= 0xFFE6) ||   // Fullwidth Signs
+        (cp >= 0x1F300 && cp <= 0x1F64F) || // Misc Symbols and Emoticons
+        (cp >= 0x1F900 && cp <= 0x1FFFF) || // Supplemental Symbols
+        (cp >= 0x20000 && cp <= 0x2FFFD) || // CJK Extension B–F
+        (cp >= 0x30000 && cp <= 0x3FFFD);   // CJK Extension G+
+
+    private void PrintPrompt()
+    {
+        var sessionDisplay = string.IsNullOrEmpty(_currentSessionId)
+            ? ""
+            : $"[grey]({_currentSessionId.EscapeMarkup()})[/] ";
+        var (emoji, color) = _modeManager.CurrentMode == AgentMode.Plan
+            ? ("📋", "yellow")
+            : ("⚡", "green");
+        AnsiConsole.Markup($"{sessionDisplay}[{color}]{emoji} ❯[/] ");
     }
 
     public void ReprintPrompt()
     {
         AnsiConsole.WriteLine();
-        PrintPrompt(_currentSessionId);
+        PrintPrompt();
     }
 
     private void ShowWelcomeScreen(string currentSessionId)
@@ -96,12 +217,36 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
         StatusPanel.ShowWelcome(currentSessionId, dashBoardUrl, _lang);
     }
 
+    private void SwitchToMode(AgentMode mode)
+    {
+        if (_modeManager.CurrentMode == mode)
+        {
+            AnsiConsole.MarkupLine($"[grey]Already in {mode.ToString().ToLower()} mode.[/]\n");
+            return;
+        }
+
+        _modeManager.SwitchMode(mode);
+        RebuildAgentForCurrentMode();
+        var (emoji, color) = mode == AgentMode.Plan ? ("📋", "yellow") : ("⚡", "green");
+        var rule = new Rule($"[{color}]{emoji} {mode.ToString().ToLower()}[/]");
+        rule.RuleStyle($"{color} dim");
+        AnsiConsole.Write(rule);
+    }
+
+    private void RebuildAgentForCurrentMode()
+    {
+        if (agentFactory == null)
+            return;
+
+        _currentAgent = agentFactory.CreateAgentForMode(_modeManager.CurrentMode, _modeManager);
+    }
+
     private async Task LoadSessionAsync(string newSessionId, CancellationToken cancellationToken)
     {
         try
         {
             // Load new session
-            _agentSession = await sessionStore.LoadOrCreateAsync(agent, newSessionId, cancellationToken);
+            _agentSession = await sessionStore.LoadOrCreateAsync(_currentAgent, newSessionId, cancellationToken);
             _currentSessionId = newSessionId;
 
             // Refresh display
@@ -127,7 +272,7 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
         {
             // Generate new session ID and create session
             var newSessionId = SessionStore.GenerateSessionId();
-            _agentSession = await sessionStore.LoadOrCreateAsync(agent, newSessionId, cancellationToken);
+            _agentSession = await sessionStore.LoadOrCreateAsync(_currentAgent, newSessionId, cancellationToken);
             _currentSessionId = newSessionId;
 
             // Refresh display
@@ -150,8 +295,9 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
         {
             var wasCurrent = sessionId == _currentSessionId;
 
-            // Delete session
+            // Delete session and associated plan file
             var sessionDeleted = sessionStore.Delete(sessionId);
+            planStore?.DeletePlan(sessionId);
 
             if (sessionDeleted)
             {
@@ -166,7 +312,7 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
             if (wasCurrent)
             {
                 _currentSessionId = SessionStore.GenerateSessionId();
-                _agentSession = await sessionStore.LoadOrCreateAsync(agent, _currentSessionId, CancellationToken.None);
+                _agentSession = await sessionStore.LoadOrCreateAsync(_currentAgent, _currentSessionId, CancellationToken.None);
                 AnsiConsole.MarkupLine($"[grey]→ {Strings.SessionNewCreated(_lang)}：{_currentSessionId.EscapeMarkup()}[/]");
             }
 
@@ -183,7 +329,8 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
     [
         "/exit", "/help", "/clear", "/new", "/load", "/delete",
         "/init", "/skills", "/mcp", "/sessions", "/memory",
-        "/config", "/debug", "/heartbeat", "/cron", "/lang", "/commands"
+        "/config", "/debug", "/heartbeat", "/cron", "/lang", "/commands",
+        "/plan", "/agent"
     ];
 
     private async Task<(bool Handled, bool ShouldExit, string? ExpandedPrompt)> HandleCommand(string input)
@@ -265,6 +412,14 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
 
             case "/commands":
                 HandleCommandsCommand();
+                return (true, false, null);
+
+            case "/plan":
+                SwitchToMode(AgentMode.Plan);
+                return (true, false, null);
+
+            case "/agent":
+                SwitchToMode(AgentMode.Agent);
                 return (true, false, null);
         }
 
@@ -638,7 +793,7 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
                 long inputTokens = 0, outputTokens = 0;
 
                 // Get streaming updates from agent
-                var stream = agent.RunStreamingAsync(RuntimeContextBuilder.AppendTo(userInput), session, cancellationToken: cancellationToken);
+                var stream = _currentAgent.RunStreamingAsync(RuntimeContextBuilder.AppendTo(userInput), session, cancellationToken: cancellationToken);
 
                 // Adapt stream to render events
                 var events = StreamAdapter.AdaptAsync(WrapStream(stream), cancellationToken, tokenTracker);

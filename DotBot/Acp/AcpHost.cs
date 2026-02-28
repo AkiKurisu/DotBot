@@ -56,6 +56,8 @@ public sealed class AcpHost(
         transport.StartReaderLoop();
         var approvalService = new AcpApprovalService(transport);
 
+        var planStore = new PlanStore(paths.BotPath);
+
         var agentFactory = new AgentFactory(
             paths.BotPath, paths.WorkspacePath, config,
             memoryStore, skillsLoader, approvalService, blacklist,
@@ -78,13 +80,15 @@ public sealed class AcpHost(
                 TraceCollector = traceCollector
             },
             traceCollector: traceCollector,
-            customCommandLoader: customCommandLoader);
+            customCommandLoader: customCommandLoader,
+            planStore: planStore);
 
         var agent = agentFactory.CreateDefaultAgent();
         var handler = new AcpHandler(
             transport, sessionStore, agentFactory, agent,
             approvalService, paths.WorkspacePath,
-            customCommandLoader, traceCollector, acpLogger);
+            customCommandLoader, traceCollector, acpLogger,
+            planStore: planStore);
 
         AnsiConsole.MarkupLine("[green][[ACP]][/] DotBot ACP agent started (stdio)");
         await handler.RunAsync(cancellationToken);
