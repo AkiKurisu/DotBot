@@ -36,6 +36,7 @@ public sealed class AgentFactory
     private readonly ToolProviderContext _toolProviderContext;
     private readonly IReadOnlyList<IAgentToolProvider> _toolProviders;
     private readonly CustomCommandLoader? _customCommandLoader;
+    private readonly PlanStore? _planStore;
 
     /// <summary>
     /// Creates a new AgentFactory with tool providers.
@@ -51,7 +52,8 @@ public sealed class AgentFactory
         IEnumerable<IAgentToolProvider> toolProviders,
         ToolProviderContext? toolProviderContext = null,
         TraceCollector? traceCollector = null,
-        CustomCommandLoader? customCommandLoader = null)
+        CustomCommandLoader? customCommandLoader = null,
+        PlanStore? planStore = null)
     {
         _config = config;
         _memoryStore = memoryStore;
@@ -60,6 +62,7 @@ public sealed class AgentFactory
         _workspacePath = workspacePath;
         _traceCollector = traceCollector;
         _customCommandLoader = customCommandLoader;
+        _planStore = planStore;
         _globalEnabledToolNames = ResolveGlobalEnabledToolNames(_config);
 
         _chatClient = new OpenAIClient(new ApiKeyCredential(config.ApiKey), new OpenAIClientOptions
@@ -93,6 +96,11 @@ public sealed class AgentFactory
     /// Gets the last created tools for inspection.
     /// </summary>
     public IReadOnlyList<AITool>? LastCreatedTools { get; private set; }
+
+    /// <summary>
+    /// Gets the plan store for persisting plan files.
+    /// </summary>
+    public PlanStore? PlanStore => _planStore;
 
     /// <summary>
     /// Gets the context compactor for large conversations.
@@ -198,6 +206,14 @@ public sealed class AgentFactory
     }
 
     /// <summary>
+    /// Tool names that are forbidden in Plan mode (write/execute tools).
+    /// </summary>
+    private static readonly HashSet<string> PlanModeDeniedTools = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "WriteFile", "EditFile", "Exec"
+    };
+
+    /// <summary>
     /// Creates default tools by aggregating all registered tool providers.
     /// Tools are ordered by provider priority (lower priority value = earlier in list).
     /// </summary>
@@ -220,6 +236,20 @@ public sealed class AgentFactory
     }
 
     /// <summary>
+    /// Creates tools filtered for the given <see cref="AgentMode"/>.
+    /// Plan mode strips write/execute tools.
+    /// </summary>
+    public List<AITool> CreateToolsForMode(AgentMode mode)
+    {
+        var tools = CreateDefaultTools();
+
+        if (mode == AgentMode.Plan)
+            tools.RemoveAll(t => PlanModeDeniedTools.Contains(t.Name));
+
+        return tools;
+    }
+
+    /// <summary>
     /// Creates the default AI agent with all registered tools.
     /// </summary>
     public AIAgent CreateDefaultAgent()
@@ -228,9 +258,17 @@ public sealed class AgentFactory
     }
 
     /// <summary>
+    /// Creates an AI agent configured for the specified mode.
+    /// </summary>
+    public AIAgent CreateAgentForMode(AgentMode mode, AgentModeManager? modeManager = null)
+    {
+        return CreateAgentWithTools(CreateToolsForMode(mode), modeManager);
+    }
+
+    /// <summary>
     /// Creates an AI agent with the specified tools.
     /// </summary>
-    public AIAgent CreateAgentWithTools(List<AITool> tools)
+    public AIAgent CreateAgentWithTools(List<AITool> tools, AgentModeManager? modeManager = null)
     {
         LastCreatedTools = tools;
 
@@ -267,7 +305,10 @@ public sealed class AgentFactory
                     _config.SystemInstructions,
                     _traceCollector,
                     () => tools.Select(t => t.Name).ToArray(),
-                    _customCommandLoader))
+                    _customCommandLoader,
+                    modeManager,
+                    _planStore,
+                    () => TracingChatClient.CurrentSessionKey))
         };
 
         return configuredChatClient.AsAIAgent(options);

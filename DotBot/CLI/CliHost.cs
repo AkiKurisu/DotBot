@@ -48,6 +48,8 @@ public sealed class CliHost(
         // Collect tool providers from modules
         var toolProviders = ToolProviderCollector.Collect(moduleRegistry, config);
 
+        var planStore = new PlanStore(paths.BotPath);
+
         var agentFactory = new AgentFactory(
             paths.BotPath, paths.WorkspacePath, config,
             memoryStore, skillsLoader, cliApprovalService, blacklist,
@@ -70,9 +72,11 @@ public sealed class CliHost(
                 TraceCollector = traceCollector
             },
             traceCollector: traceCollector,
-            customCommandLoader: sp.GetService<CustomCommandLoader>());
+            customCommandLoader: sp.GetService<CustomCommandLoader>(),
+            planStore: planStore);
 
-        var agent = agentFactory.CreateDefaultAgent();
+        var modeManager = new AgentModeManager();
+        var agent = agentFactory.CreateAgentForMode(AgentMode.Agent, modeManager);
         var sessionGate = sp.GetRequiredService<SessionGate>();
         var runner = new AgentRunner(agent, sessionStore, agentFactory, traceCollector, sessionGate);
 
@@ -98,7 +102,9 @@ public sealed class CliHost(
             agentFactory: agentFactory, mcpClientManager: mcpClientManager,
             dashBoardUrl: dashBoardUrl,
             languageService: languageService, tokenUsageStore: tokenUsageStore,
-            customCommandLoader: customCommandLoader);
+            customCommandLoader: customCommandLoader,
+            modeManager: modeManager,
+            planStore: planStore);
 
         cronService.OnJob = async job =>
         {

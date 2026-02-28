@@ -24,14 +24,19 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
     AgentFactory? agentFactory = null, McpClientManager? mcpClientManager = null,
     string? dashBoardUrl = null,
     LanguageService? languageService = null, TokenUsageStore? tokenUsageStore = null,
-    CustomCommandLoader? customCommandLoader = null)
+    CustomCommandLoader? customCommandLoader = null,
+    AgentModeManager? modeManager = null,
+    PlanStore? planStore = null)
 {
     private readonly AppConfig _config = config ?? new AppConfig();
     private readonly LanguageService _lang = languageService ?? new LanguageService();
+    private readonly AgentModeManager _modeManager = modeManager ?? new AgentModeManager();
+    private readonly PlanStore? _planStore = planStore;
 
     private string _currentSessionId = string.Empty;
     
     private AgentSession _agentSession = null!;
+    private AIAgent _currentAgent = agent;
 
     public async Task RunAsync(CancellationToken cancellationToken = default)
     {
@@ -40,11 +45,16 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
         ShowWelcomeScreen(_currentSessionId);
 
         // Load or create session
-        _agentSession = await sessionStore.LoadOrCreateAsync(agent, _currentSessionId, cancellationToken);
+        _agentSession = await sessionStore.LoadOrCreateAsync(_currentAgent, _currentSessionId, cancellationToken);
 
         while (true)
         {
-            var input = ReadInput(_currentSessionId);
+            var input = ReadInput();
+            if (input == null)
+            {
+                // Tab was pressed -- mode already toggled, just re-loop for new prompt
+                continue;
+            }
             if (string.IsNullOrWhiteSpace(input))
             {
                 continue;
@@ -66,29 +76,36 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
             {
                 await TryCompactContextAsync(_currentSessionId, _agentSession, cancellationToken);
                 agentFactory?.TryConsolidateMemory(_agentSession, _currentSessionId);
-                await sessionStore.SaveAsync(agent, _agentSession, _currentSessionId, cancellationToken);
+                await sessionStore.SaveAsync(_currentAgent, _agentSession, _currentSessionId, cancellationToken);
             }
         }
 
         AnsiConsole.MarkupLine($"\n[blue]👋 {Strings.Goodbye(_lang)}[/]");
     }
 
-    private static string? ReadInput(string currentSessionId = "")
+    /// <summary>
+    /// Reads a line of input, intercepting Tab on an empty buffer to toggle mode.
+    /// Returns null to signal a mode-switch (caller should re-print prompt and continue).
+    /// </summary>
+    private string? ReadInput()
     {
-        PrintPrompt(currentSessionId);
+        PrintPrompt();
         return Console.ReadLine();
     }
 
-    private static void PrintPrompt(string currentSessionId)
+    private void PrintPrompt()
     {
-        var sessionDisplay = string.IsNullOrEmpty(currentSessionId) ? "" : $"[grey]({currentSessionId.EscapeMarkup()})[/]";
-        AnsiConsole.Markup($"[green]{sessionDisplay}> [/]");
+        var sessionDisplay = string.IsNullOrEmpty(_currentSessionId) ? "" : $"[grey]({_currentSessionId.EscapeMarkup()})[/]";
+        var modeLabel = _modeManager.CurrentMode == AgentMode.Plan
+            ? "[yellow][[plan]][/]"
+            : "[green][[agent]][/]";
+        AnsiConsole.Markup($"{sessionDisplay} {modeLabel}[green]> [/]");
     }
 
     public void ReprintPrompt()
     {
         AnsiConsole.WriteLine();
-        PrintPrompt(_currentSessionId);
+        PrintPrompt();
     }
 
     private void ShowWelcomeScreen(string currentSessionId)
@@ -96,12 +113,35 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
         StatusPanel.ShowWelcome(currentSessionId, dashBoardUrl, _lang);
     }
 
+    private void SwitchToMode(AgentMode mode)
+    {
+        if (_modeManager.CurrentMode == mode)
+        {
+            AnsiConsole.MarkupLine($"[grey]Already in {mode.ToString().ToLower()} mode.[/]\n");
+            return;
+        }
+
+        _modeManager.SwitchMode(mode);
+        RebuildAgentForCurrentMode();
+        var modeColor = mode == AgentMode.Plan ? "yellow" : "green";
+        var modeName = mode.ToString().ToLower();
+        AnsiConsole.MarkupLine($"[{modeColor}]Mode switched to: {modeName}[/]\n");
+    }
+
+    private void RebuildAgentForCurrentMode()
+    {
+        if (agentFactory == null)
+            return;
+
+        _currentAgent = agentFactory.CreateAgentForMode(_modeManager.CurrentMode, _modeManager);
+    }
+
     private async Task LoadSessionAsync(string newSessionId, CancellationToken cancellationToken)
     {
         try
         {
             // Load new session
-            _agentSession = await sessionStore.LoadOrCreateAsync(agent, newSessionId, cancellationToken);
+            _agentSession = await sessionStore.LoadOrCreateAsync(_currentAgent, newSessionId, cancellationToken);
             _currentSessionId = newSessionId;
 
             // Refresh display
@@ -127,7 +167,7 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
         {
             // Generate new session ID and create session
             var newSessionId = SessionStore.GenerateSessionId();
-            _agentSession = await sessionStore.LoadOrCreateAsync(agent, newSessionId, cancellationToken);
+            _agentSession = await sessionStore.LoadOrCreateAsync(_currentAgent, newSessionId, cancellationToken);
             _currentSessionId = newSessionId;
 
             // Refresh display
@@ -150,8 +190,9 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
         {
             var wasCurrent = sessionId == _currentSessionId;
 
-            // Delete session
+            // Delete session and associated plan file
             var sessionDeleted = sessionStore.Delete(sessionId);
+            _planStore?.DeletePlan(sessionId);
 
             if (sessionDeleted)
             {
@@ -166,7 +207,7 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
             if (wasCurrent)
             {
                 _currentSessionId = SessionStore.GenerateSessionId();
-                _agentSession = await sessionStore.LoadOrCreateAsync(agent, _currentSessionId, CancellationToken.None);
+                _agentSession = await sessionStore.LoadOrCreateAsync(_currentAgent, _currentSessionId, CancellationToken.None);
                 AnsiConsole.MarkupLine($"[grey]→ {Strings.SessionNewCreated(_lang)}：{_currentSessionId.EscapeMarkup()}[/]");
             }
 
@@ -183,7 +224,8 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
     [
         "/exit", "/help", "/clear", "/new", "/load", "/delete",
         "/init", "/skills", "/mcp", "/sessions", "/memory",
-        "/config", "/debug", "/heartbeat", "/cron", "/lang", "/commands"
+        "/config", "/debug", "/heartbeat", "/cron", "/lang", "/commands",
+        "/plan", "/agent"
     ];
 
     private async Task<(bool Handled, bool ShouldExit, string? ExpandedPrompt)> HandleCommand(string input)
@@ -265,6 +307,14 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
 
             case "/commands":
                 HandleCommandsCommand();
+                return (true, false, null);
+
+            case "/plan":
+                SwitchToMode(AgentMode.Plan);
+                return (true, false, null);
+
+            case "/agent":
+                SwitchToMode(AgentMode.Agent);
                 return (true, false, null);
         }
 
@@ -636,9 +686,11 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
                 TracingChatClient.CurrentSessionKey = _currentSessionId;
                 TracingChatClient.ResetCallState(_currentSessionId);
                 long inputTokens = 0, outputTokens = 0;
+                var modeAtStart = _modeManager.CurrentMode;
+                var planTextBuilder = new StringBuilder();
 
                 // Get streaming updates from agent
-                var stream = agent.RunStreamingAsync(RuntimeContextBuilder.AppendTo(userInput), session, cancellationToken: cancellationToken);
+                var stream = _currentAgent.RunStreamingAsync(RuntimeContextBuilder.AppendTo(userInput), session, cancellationToken: cancellationToken);
 
                 // Adapt stream to render events
                 var events = StreamAdapter.AdaptAsync(WrapStream(stream), cancellationToken, tokenTracker);
@@ -648,6 +700,14 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
                 
                 // Wait for renderer to finish
                 await renderer.StopAsync();
+
+                // Auto-save plan file if this turn started in Plan mode
+                if (_planStore != null && modeAtStart == AgentMode.Plan)
+                {
+                    var planText = planTextBuilder.ToString();
+                    if (!string.IsNullOrWhiteSpace(planText))
+                        await _planStore.SavePlanAsync(_currentSessionId, planText);
+                }
 
                 if (inputTokens > 0 || outputTokens > 0)
                 {
@@ -677,6 +737,8 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
                                     outputTokens = usage.Details.OutputTokenCount.Value;
                             }
                         }
+                        if (!string.IsNullOrEmpty(update.Text))
+                            planTextBuilder.Append(update.Text);
                         yield return update;
                     }
                 }

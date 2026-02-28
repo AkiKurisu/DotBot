@@ -426,6 +426,17 @@ public sealed class AcpFileLocation
     public string Uri { get; set; } = "";
 }
 
+// ───── ACP session/mode ─────
+
+public sealed class SessionModeParams
+{
+    [JsonPropertyName("sessionId")]
+    public string SessionId { get; set; } = "";
+
+    [JsonPropertyName("mode")]
+    public string? Mode { get; set; }
+}
+
 // ───── ACP session/cancel (notification) ─────
 
 public sealed class SessionCancelParams
