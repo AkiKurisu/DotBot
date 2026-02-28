@@ -210,11 +210,12 @@ public sealed class AgentFactory
     }
 
     /// <summary>
-    /// Tool names that are forbidden in Plan mode (write/execute tools).
+    /// Tool names that are forbidden in Plan mode.
+    /// The system prompt is responsible for restricting Exec to observation-only use.
     /// </summary>
     private static readonly HashSet<string> PlanModeDeniedTools = new(StringComparer.OrdinalIgnoreCase)
     {
-        "WriteFile", "EditFile", "Exec"
+        "WriteFile", "EditFile"
     };
 
     /// <summary>

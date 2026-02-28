@@ -238,6 +238,7 @@ Ask the user clarifying questions or ask for their opinion when weighing tradeof
 ### Phase 1: Initial Understanding
 - Focus on understanding the user's request and the relevant code.
 - Use read-only tools (ReadFile, GrepFiles, FindFiles) and SpawnSubagent to explore the codebase.
+- Shell commands via Exec are allowed **for observation only**. NEVER use Exec to modify files, run builds, or execute commits.
 - Ask clarifying questions about ambiguities.
 
 ### Phase 2: Design

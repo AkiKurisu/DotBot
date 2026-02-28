@@ -48,7 +48,7 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
 
         while (true)
         {
-            var input = ReadInput();
+            var input = await ReadInputAsync(cancellationToken);
             if (input == null)
             {
                 // Tab was pressed -- mode already toggled, just re-loop for new prompt
@@ -83,22 +83,127 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
     }
 
     /// <summary>
-    /// Reads a line of input, intercepting Tab on an empty buffer to toggle mode.
+    /// Reads a line of input, intercepting Tab to toggle mode.
     /// Returns null to signal a mode-switch (caller should re-print prompt and continue).
     /// </summary>
-    private string? ReadInput()
+    private async Task<string?> ReadInputAsync(CancellationToken cancellationToken)
     {
         PrintPrompt();
-        return Console.ReadLine();
+
+        // Each entry is one logical character (may be a surrogate pair for non-BMP codepoints).
+        var buffer = new List<string>();
+
+        while (true)
+        {
+            var keyInfo = await AnsiConsole.Console.Input.ReadKeyAsync(intercept: true, cancellationToken);
+            if (keyInfo is not { } key)
+                continue;
+
+            switch (key.Key)
+            {
+                case ConsoleKey.Tab:
+                    var next = _modeManager.CurrentMode == AgentMode.Plan
+                        ? AgentMode.Agent
+                        : AgentMode.Plan;
+                    AnsiConsole.WriteLine();
+                    SwitchToMode(next);
+                    return null;
+
+                case ConsoleKey.Enter:
+                    AnsiConsole.WriteLine();
+                    return string.Concat(buffer);
+
+                case ConsoleKey.Backspace:
+                    if (buffer.Count > 0)
+                    {
+                        var last = buffer[^1];
+                        buffer.RemoveAt(buffer.Count - 1);
+                        // Erase exactly as many terminal columns as the character occupies.
+                        var w = GetDisplayWidth(last);
+                        AnsiConsole.Write(new string('\b', w) + new string(' ', w) + new string('\b', w));
+                    }
+                    break;
+
+                default:
+                    if (key.KeyChar == '\0')
+                        break;
+
+                    string ch;
+                    if (char.IsHighSurrogate(key.KeyChar))
+                    {
+                        // Non-BMP character: wait for the paired low surrogate.
+                        var lowInfo = await AnsiConsole.Console.Input.ReadKeyAsync(intercept: true, cancellationToken);
+                        if (lowInfo is { } lowKey && char.IsLowSurrogate(lowKey.KeyChar))
+                            ch = new string([key.KeyChar, lowKey.KeyChar]);
+                        else
+                            break; // Malformed surrogate, skip.
+                    }
+                    else
+                    {
+                        ch = key.KeyChar.ToString();
+                    }
+
+                    buffer.Add(ch);
+                    AnsiConsole.Write(ch);
+                    break;
+            }
+        }
     }
+
+    /// <summary>
+    /// Returns the number of terminal columns occupied by the string.
+    /// Wide characters (CJK, full-width forms, etc.) count as 2 columns.
+    /// </summary>
+    private static int GetDisplayWidth(string s)
+    {
+        var width = 0;
+        var i = 0;
+        while (i < s.Length)
+        {
+            int cp;
+            if (char.IsHighSurrogate(s[i]) && i + 1 < s.Length && char.IsLowSurrogate(s[i + 1]))
+            {
+                cp = char.ConvertToUtf32(s[i], s[i + 1]);
+                i += 2;
+            }
+            else
+            {
+                cp = s[i];
+                i++;
+            }
+            width += IsWideCodePoint(cp) ? 2 : 1;
+        }
+        return width;
+    }
+
+    private static bool IsWideCodePoint(int cp) =>
+        (cp >= 0x1100 && cp <= 0x115F) ||   // Hangul Jamo
+        cp is 0x2329 or 0x232A ||
+        (cp >= 0x2E80 && cp <= 0x303E) ||   // CJK Radicals / Kangxi
+        (cp >= 0x3040 && cp <= 0x33FF) ||   // Hiragana, Katakana, Bopomofo, CJK symbols
+        (cp >= 0x3400 && cp <= 0x4DBF) ||   // CJK Extension A
+        (cp >= 0x4E00 && cp <= 0xA4CF) ||   // CJK Unified Ideographs + Extension A end
+        (cp >= 0xA960 && cp <= 0xA97F) ||   // Hangul Jamo Extended-A
+        (cp >= 0xAC00 && cp <= 0xD7FF) ||   // Hangul Syllables
+        (cp >= 0xF900 && cp <= 0xFAFF) ||   // CJK Compatibility Ideographs
+        (cp >= 0xFE10 && cp <= 0xFE1F) ||   // Vertical Forms
+        (cp >= 0xFE30 && cp <= 0xFE4F) ||   // CJK Compatibility Forms
+        (cp >= 0xFF00 && cp <= 0xFF60) ||   // Fullwidth Latin / Katakana
+        (cp >= 0xFFE0 && cp <= 0xFFE6) ||   // Fullwidth Signs
+        (cp >= 0x1F300 && cp <= 0x1F64F) || // Misc Symbols and Emoticons
+        (cp >= 0x1F900 && cp <= 0x1FFFF) || // Supplemental Symbols
+        (cp >= 0x20000 && cp <= 0x2FFFD) || // CJK Extension B–F
+        (cp >= 0x30000 && cp <= 0x3FFFD);   // CJK Extension G+
 
     private void PrintPrompt()
     {
-        var sessionDisplay = string.IsNullOrEmpty(_currentSessionId) ? "" : $"[grey]({_currentSessionId.EscapeMarkup()})[/]";
-        var modeLabel = _modeManager.CurrentMode == AgentMode.Plan
-            ? "[yellow][[plan]][/]"
-            : "[green][[agent]][/]";
-        AnsiConsole.Markup($"{sessionDisplay} {modeLabel}[green]> [/]");
+        var sessionDisplay = string.IsNullOrEmpty(_currentSessionId)
+            ? ""
+            : $"[grey]({_currentSessionId.EscapeMarkup()})[/] ";
+        var (emoji, color) = _modeManager.CurrentMode == AgentMode.Plan
+            ? ("📋", "yellow")
+            : ("⚡", "green");
+        AnsiConsole.Markup($"{sessionDisplay}[{color}]{emoji} ❯[/] ");
     }
 
     public void ReprintPrompt()
@@ -122,9 +227,10 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
 
         _modeManager.SwitchMode(mode);
         RebuildAgentForCurrentMode();
-        var modeColor = mode == AgentMode.Plan ? "yellow" : "green";
-        var modeName = mode.ToString().ToLower();
-        AnsiConsole.MarkupLine($"[{modeColor}]Mode switched to: {modeName}[/]\n");
+        var (emoji, color) = mode == AgentMode.Plan ? ("📋", "yellow") : ("⚡", "green");
+        var rule = new Rule($"[{color}]{emoji} {mode.ToString().ToLower()}[/]");
+        rule.RuleStyle($"{color} dim");
+        AnsiConsole.Write(rule);
     }
 
     private void RebuildAgentForCurrentMode()
