@@ -8,6 +8,7 @@ using DotBot.DashBoard;
 using DotBot.Memory;
 using DotBot.Security;
 using DotBot.Skills;
+using DotBot.Tools;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using OpenAI;
@@ -37,6 +38,7 @@ public sealed class AgentFactory
     private readonly IReadOnlyList<IAgentToolProvider> _toolProviders;
     private readonly CustomCommandLoader? _customCommandLoader;
     private readonly PlanStore? _planStore;
+    private readonly Action<StructuredPlan>? _onPlanUpdated;
 
     /// <summary>
     /// Creates a new AgentFactory with tool providers.
@@ -53,7 +55,8 @@ public sealed class AgentFactory
         ToolProviderContext? toolProviderContext = null,
         TraceCollector? traceCollector = null,
         CustomCommandLoader? customCommandLoader = null,
-        PlanStore? planStore = null)
+        PlanStore? planStore = null,
+        Action<StructuredPlan>? onPlanUpdated = null)
     {
         _config = config;
         _memoryStore = memoryStore;
@@ -63,6 +66,7 @@ public sealed class AgentFactory
         _traceCollector = traceCollector;
         _customCommandLoader = customCommandLoader;
         _planStore = planStore;
+        _onPlanUpdated = onPlanUpdated;
         _globalEnabledToolNames = ResolveGlobalEnabledToolNames(_config);
 
         _chatClient = new OpenAIClient(new ApiKeyCredential(config.ApiKey), new OpenAIClientOptions
@@ -244,7 +248,20 @@ public sealed class AgentFactory
         var tools = CreateDefaultTools();
 
         if (mode == AgentMode.Plan)
+        {
             tools.RemoveAll(t => PlanModeDeniedTools.Contains(t.Name));
+
+            if (_planStore != null)
+            {
+                var planTools = new PlanTools(_planStore, () => TracingChatClient.CurrentSessionKey, _onPlanUpdated);
+                tools.Add(AIFunctionFactory.Create(planTools.CreatePlan));
+            }
+        }
+        else if (mode == AgentMode.Agent && _planStore != null)
+        {
+            var planTools = new PlanTools(_planStore, () => TracingChatClient.CurrentSessionKey, _onPlanUpdated);
+            tools.Add(AIFunctionFactory.Create(planTools.UpdateTodos));
+        }
 
         return tools;
     }

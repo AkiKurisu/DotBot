@@ -16,7 +16,9 @@ public static class AcpToolKindMapper
         ["Exec"] = AcpToolKind.Execute,
         ["WebSearch"] = AcpToolKind.Fetch,
         ["WebFetch"] = AcpToolKind.Fetch,
-        ["SpawnSubagent"] = AcpToolKind.Think
+        ["SpawnSubagent"] = AcpToolKind.Think,
+        ["CreatePlan"] = AcpToolKind.Other,
+        ["UpdateTodos"] = AcpToolKind.Other
     };
 
     /// <summary>

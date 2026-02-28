@@ -73,7 +73,8 @@ public sealed class CliHost(
             },
             traceCollector: traceCollector,
             customCommandLoader: sp.GetService<CustomCommandLoader>(),
-            planStore: planStore);
+            planStore: planStore,
+            onPlanUpdated: StatusPanel.ShowPlanStatus);
 
         var modeManager = new AgentModeManager();
         var agent = agentFactory.CreateAgentForMode(AgentMode.Agent, modeManager);

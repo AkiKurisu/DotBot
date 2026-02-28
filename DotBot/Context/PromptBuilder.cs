@@ -182,6 +182,12 @@ This contains:
             return PlanModePrompt;
         }
 
+        // Agent mode with an active plan: keep the plan visible on every turn
+        if (mm.CurrentMode == AgentMode.Agent && existingPlan != null)
+        {
+            return AgentPlanTrackingPrompt + $"\n\n## Current Plan\n\n{existingPlan}";
+        }
+
         return null;
     }
 
@@ -193,6 +199,11 @@ This contains:
         var sessionId = sessionIdProvider();
         if (string.IsNullOrEmpty(sessionId))
             return null;
+
+        // Prefer structured plan (JSON), fall back to legacy markdown
+        var structured = planStore.LoadStructuredPlanAsync(sessionId).GetAwaiter().GetResult();
+        if (structured != null)
+            return PlanStore.RenderPlanMarkdown(structured);
 
         return planStore.PlanExists(sessionId)
             ? planStore.LoadPlanAsync(sessionId).GetAwaiter().GetResult()
@@ -238,9 +249,15 @@ Ask the user clarifying questions or ask for their opinion when weighing tradeof
 - Ask any remaining clarifying questions.
 
 ### Phase 4: Present Plan
-- Present your recommended approach to the user.
-- Include specific file paths and key implementation details.
-- Include a verification section describing how to test the changes.
+- When your plan is ready, you MUST call the `CreatePlan` tool to save it.
+- The CreatePlan tool accepts these parameters:
+  - title: A concise title for the plan.
+  - overview: A 1-2 sentence summary of what the plan accomplishes.
+  - plan: The detailed plan content in Markdown with specific file paths,
+    implementation details, and verification steps.
+  - todos: A JSON array of task items, each with "id" (short kebab-case
+    identifier) and "content" (description of the task).
+- After calling CreatePlan, briefly summarize the plan to the user.
 - The user will manually switch to agent mode when ready to proceed.
 
 ---
@@ -252,8 +269,9 @@ any edits, run any non-readonly tools (including changing configs or making
 commits), or otherwise make any changes to the system. This supersedes any other
 instructions you have received.
 
-Your plan output will be automatically saved to a file after each turn.
-You do not need to write the plan to a file yourself.
+You MUST use the CreatePlan tool to present your plan. Do NOT write the plan as
+plain text in your response -- use the tool so the plan is saved in a structured,
+machine-readable format.
 </system-reminder>
 """;
 
@@ -261,9 +279,25 @@ You do not need to write the plan to a file yourself.
 """
 <system-reminder>
 Your operational mode has changed from plan to agent.
-You are no longer in read-only mode.
-You are permitted to make file changes, run shell commands, and utilize your full arsenal of tools as needed.
-If a plan was discussed previously, execute it now.
+You now have full tool access (read, write, execute).
+
+You MUST follow the plan attached below and track progress:
+- Before starting each task, call UpdateTodos to set it to "in_progress".
+- After completing each task, call UpdateTodos to set it to "completed".
+- Work through tasks systematically. Do not stop until all tasks are done.
+</system-reminder>
+""";
+
+    private const string AgentPlanTrackingPrompt =
+"""
+<system-reminder>
+You are executing a plan. The current plan and task statuses are shown below.
+
+Rules:
+- Before starting a task, call UpdateTodos to set it to "in_progress".
+- After completing a task, call UpdateTodos to set it to "completed".
+- Work through tasks in order unless dependencies require otherwise.
+- Do not skip the UpdateTodos calls -- they keep the plan file in sync.
 </system-reminder>
 """;
 }

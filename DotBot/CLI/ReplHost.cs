@@ -31,7 +31,6 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
     private readonly AppConfig _config = config ?? new AppConfig();
     private readonly LanguageService _lang = languageService ?? new LanguageService();
     private readonly AgentModeManager _modeManager = modeManager ?? new AgentModeManager();
-    private readonly PlanStore? _planStore = planStore;
 
     private string _currentSessionId = string.Empty;
     
@@ -192,7 +191,7 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
 
             // Delete session and associated plan file
             var sessionDeleted = sessionStore.Delete(sessionId);
-            _planStore?.DeletePlan(sessionId);
+            planStore?.DeletePlan(sessionId);
 
             if (sessionDeleted)
             {
@@ -686,8 +685,6 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
                 TracingChatClient.CurrentSessionKey = _currentSessionId;
                 TracingChatClient.ResetCallState(_currentSessionId);
                 long inputTokens = 0, outputTokens = 0;
-                var modeAtStart = _modeManager.CurrentMode;
-                var planTextBuilder = new StringBuilder();
 
                 // Get streaming updates from agent
                 var stream = _currentAgent.RunStreamingAsync(RuntimeContextBuilder.AppendTo(userInput), session, cancellationToken: cancellationToken);
@@ -700,14 +697,6 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
                 
                 // Wait for renderer to finish
                 await renderer.StopAsync();
-
-                // Auto-save plan file if this turn started in Plan mode
-                if (_planStore != null && modeAtStart == AgentMode.Plan)
-                {
-                    var planText = planTextBuilder.ToString();
-                    if (!string.IsNullOrWhiteSpace(planText))
-                        await _planStore.SavePlanAsync(_currentSessionId, planText);
-                }
 
                 if (inputTokens > 0 || outputTokens > 0)
                 {
@@ -737,8 +726,6 @@ public sealed class ReplHost(AIAgent agent, SessionStore sessionStore, SkillsLoa
                                     outputTokens = usage.Details.OutputTokenCount.Value;
                             }
                         }
-                        if (!string.IsNullOrEmpty(update.Text))
-                            planTextBuilder.Append(update.Text);
                         yield return update;
                     }
                 }

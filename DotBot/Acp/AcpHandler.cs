@@ -315,9 +315,7 @@ public sealed class AcpHandler(
                 agentFactory.LastCreatedTools?.Select(t => t.Name));
 
             var currentAgent = _sessionAgents.GetValueOrDefault(sessionId, agent);
-            var modeAtStart = _sessionModes.TryGetValue(sessionId, out var modeMgr) ? modeMgr.CurrentMode : AgentMode.Agent;
             var session = await sessionStore.LoadOrCreateAsync(currentAgent, sessionId, promptCts.Token);
-            var sb = new StringBuilder();
             long inputTokens = 0, outputTokens = 0, totalTokens = 0;
             var tokenTracker = agentFactory.GetOrCreateTokenTracker(sessionId);
 
@@ -350,7 +348,6 @@ public sealed class AcpHandler(
 
                     if (!string.IsNullOrEmpty(update.Text))
                     {
-                        sb.Append(update.Text);
                         SendMessageChunk(sessionId, update.Text);
                     }
                 }
@@ -366,12 +363,13 @@ public sealed class AcpHandler(
 
             await sessionStore.SaveAsync(currentAgent, session, sessionId, CancellationToken.None);
 
-            // Auto-save plan file if this turn started in Plan mode
-            if (planStore != null && modeAtStart == AgentMode.Plan)
+            // Send structured plan update whenever a plan exists (covers both
+            // plan creation in Plan mode and todo updates in Agent mode)
+            if (planStore != null && planStore.StructuredPlanExists(sessionId))
             {
-                var planText = sb.ToString();
-                if (!string.IsNullOrWhiteSpace(planText))
-                    await planStore.SavePlanAsync(sessionId, planText);
+                var structuredPlan = await planStore.LoadStructuredPlanAsync(sessionId);
+                if (structuredPlan != null)
+                    SendPlanUpdate(sessionId, structuredPlan);
             }
 
             if (totalTokens > 0)
@@ -441,6 +439,24 @@ public sealed class AcpHandler(
             {
                 SessionUpdate = AcpUpdateKind.AgentMessageChunk,
                 Content = new AcpContentBlock { Type = "text", Text = text }
+            }
+        });
+    }
+
+    private void SendPlanUpdate(string sessionId, StructuredPlan plan)
+    {
+        var content = new List<AcpContentBlock>
+        {
+            new() { Type = "text", Text = PlanStore.RenderPlanMarkdown(plan) }
+        };
+        transport.SendNotification(AcpMethods.SessionUpdate, new SessionUpdateParams
+        {
+            SessionId = sessionId,
+            Update = new AcpSessionUpdate
+            {
+                SessionUpdate = AcpUpdateKind.Plan,
+                Title = plan.Title,
+                Content = content
             }
         });
     }
