@@ -410,6 +410,60 @@ API 模式支持三种审批模式，通过 `ApprovalMode` 配置（设置后覆
 
 ---
 
+## ACP 模式配置
+
+ACP（[Agent Client Protocol](https://agentclientprotocol.com/)）模式允许 DotBot 作为 AI 编码代理直接与代码编辑器/IDE（如 Cursor、VS Code 等兼容编辑器）集成。编辑器通过 stdio（标准输入/输出）以 JSON-RPC 2.0 协议与 DotBot 通信，类似 LSP（Language Server Protocol）的工作方式。
+
+| 配置项 | 说明 | 默认值 |
+|--------|------|--------|
+| `Acp.Enabled` | 是否启用 ACP 模式 | `false` |
+
+### 启用 ACP 模式
+
+```json
+{
+    "Acp": {
+        "Enabled": true
+    }
+}
+```
+
+### 工作原理
+
+启用后，DotBot 将通过 stdin/stdout 接收和发送 JSON-RPC 消息：
+
+1. **编辑器启动 DotBot 进程**：编辑器将 DotBot 作为子进程启动，并通过 stdio 通信
+2. **初始化握手**：双方交换协议版本和能力声明
+3. **会话管理**：编辑器创建会话，DotBot 广播可用的斜杠命令和配置选项
+4. **提示交互**：编辑器发送用户消息，DotBot 流式返回回复、工具调用状态和执行结果
+5. **权限请求**：DotBot 执行敏感操作前通过协议向编辑器请求用户授权
+
+### 支持的 ACP 协议功能
+
+| 功能 | 说明 |
+|------|------|
+| `initialize` | 协议版本协商和能力交换 |
+| `session/new` | 创建新会话 |
+| `session/load` | 加载已有会话并回放历史 |
+| `session/list` | 列出所有 ACP 会话 |
+| `session/prompt` | 发送提示并流式接收回复 |
+| `session/update` | Agent 向编辑器推送消息块、工具调用状态等 |
+| `session/cancel` | 取消正在进行的操作 |
+| `requestPermission` | Agent 向编辑器请求执行权限 |
+| `fs/readTextFile` | 通过编辑器读取文件（含未保存内容） |
+| `fs/writeTextFile` | 通过编辑器写入文件（可预览 diff） |
+| `terminal/*` | 通过编辑器创建和管理终端 |
+| Slash Commands | 自动广播自定义命令到编辑器 |
+| Config Options | 暴露可选配置（模式、模型等）到编辑器 |
+
+### 与其他模式的关系
+
+- ACP 模式可以作为独立模式运行（优先级高于 API 模式）
+- 在 Gateway 模式下，ACP 可以与 QQ Bot、WeCom Bot、API 并发运行
+- ACP 模式的会话 ID 以 `acp:` 为前缀，与其他 Channel 隔离
+
+---
+
 ## Cron 定时任务服务
 
 Cron 是一个定时任务调度系统，支持一次性和周期性任务。任务持久化到 JSON 文件中，重启后自动恢复。
@@ -866,6 +920,9 @@ Heartbeat 结果会通过 MessageRouter 广播到所有有管理员配置的 Cha
     "Cron": {
         "Enabled": false,
         "StorePath": "cron/jobs.json"
+    },
+    "Acp": {
+        "Enabled": false
     },
     "DashBoard": {
         "Enabled": false,

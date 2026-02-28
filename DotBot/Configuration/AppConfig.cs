@@ -86,6 +86,8 @@ public sealed class AppConfig
 
     public ApiConfig Api { get; set; } = new();
 
+    public AcpConfig Acp { get; set; } = new();
+
     public DashBoardConfig DashBoard { get; set; } = new();
 
     public List<McpServerConfig> McpServers { get; set; } = [];
@@ -363,6 +365,14 @@ public sealed class AppConfig
         /// </summary>
         public int ApprovalTimeoutSeconds { get; set; } = 120;
 
+    }
+
+    public sealed class AcpConfig
+    {
+        /// <summary>
+        /// Enable ACP (Agent Client Protocol) mode for editor/IDE integration via stdio.
+        /// </summary>
+        public bool Enabled { get; set; }
     }
 
     public sealed class DashBoardConfig

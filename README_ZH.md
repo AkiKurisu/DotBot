@@ -8,7 +8,7 @@
 
 # DotBot
 
-**DotBot** (.Bot) 是一个轻量级的 .Net 版 OpenClaw，安全可靠，开箱即用。
+**DotBot** (.Bot) 是基于 .NET 的轻量智能助理，通过 ACP 与 MCP 双协议对接编辑器与外部工具，技能与命令可插拔，覆盖编辑器、CLI 与聊天机器人全场景。
 
 ![banner](./Documentation/images/banner.png)
 
@@ -26,7 +26,8 @@
 
 - 🛠️ **工具能力**: 文件读写（工作区内）、受控 Shell 命令、Web 抓取、可选子智能体（SubAgent）
 - 🔌 **MCP 接入**: 支持通过 [Model Context Protocol](https://modelcontextprotocol.io/) 接入外部工具服务
-- 🎯 **运行形态**: 本地 REPL、QQ 机器人（OneBot V11）、企业微信机器人、API 服务（OpenAI 兼容）、**Gateway 多 Channel 并发模式**
+- 🖥️ **ACP 编辑器集成**: 通过 stdio JSON-RPC 作为原生编码代理运行在任意 [ACP](https://agentclientprotocol.com/) 兼容编辑器中（JetBrains IDE、Obsidian 等），无需云依赖，无厂商锁定
+- 🎯 **运行形态**: 本地 REPL、QQ 机器人（OneBot V11）、企业微信机器人、API 服务（OpenAI 兼容）、ACP 编辑器集成、**Gateway 多 Channel 并发模式**
 - 📊 **监控面板**: 内置 Web 调试界面，实时监控 Token 使用、会话历史和工具调用追踪
 - 🧩 **技能系统**: 支持动态加载技能
 - 📢 **通知推送**: 企业微信群机器人和 Webhook 推送
@@ -47,6 +48,14 @@
 
 <div align="center">DashBoard 监控用量和会话历史</div>
 
+![jetbrain acp](./Documentation/images/jetbrain_acp.png)
+
+<div align="center">ACP 模式 — JetBrains Rider</div>
+
+![obsidian acp](./Documentation/images/obsidian_acp.png)
+
+<div align="center">ACP 模式 — Obsidian</div>
+
 ## 🏗️ 架构
 
 ```mermaid
@@ -56,6 +65,7 @@ flowchart TB
         QQ[QQ Bot]
         WeCom[WeCom Bot]
         API[API Service]
+        ACP["ACP (Editor/IDE)"]
     end
 
     subgraph gateway [Gateway]
@@ -97,7 +107,7 @@ flowchart TB
     classDef workspaceStyle fill:#d1fae5,stroke:#10b981,color:#064e3b
     classDef toolStyle fill:#fee2e2,stroke:#ef4444,color:#7f1d1d
 
-    class CLI,QQ,WeCom,API channelStyle
+    class CLI,QQ,WeCom,API,ACP channelStyle
     class MsgRouter,SessGate gatewayStyle
     class AgentFactory,AgentRunner,PromptBuilder coreStyle
     class SessionStore,MemoryStore,Skills,Commands,Config workspaceStyle
@@ -113,6 +123,7 @@ flowchart TB
 - **QQ**：`qq_{groupId}`（群聊）或 `qq_{userId}`（私聊）
 - **WeCom**：`wecom_{chatId}_{userId}`
 - **API**：从请求头 `X-Session-Key`、Body 中的 `user` 字段或内容指纹中解析
+- **ACP**：`acp_{sessionId}`（由编辑器管理）
 
 `SessionGate` 对每个会话提供互斥保护——同一会话的并发请求将被串行化，不同会话则完全并行执行。`MaxSessionQueueSize` 控制每个会话的最大排队请求数，超出时最旧的请求将被丢弃。
 
@@ -187,6 +198,7 @@ dotbot
 | API 模式 | `Api.Enabled = true` | OpenAI 兼容 HTTP 服务 |
 | QQ 机器人 | `QQBot.Enabled = true` | OneBot V11 协议机器人 |
 | 企业微信 | `WeComBot.Enabled = true` | 企业微信机器人 |
+| ACP 模式 | `Acp.Enabled = true` | 编辑器/IDE 集成（[ACP](https://agentclientprotocol.com/)） |
 
 ### 使用 Bootstrap 文件进行自定义
 
@@ -244,6 +256,7 @@ $ARGUMENTS
 | [API 模式指南](./Documentation/api_guide.md) | OpenAI 兼容 API、工具过滤、SDK 示例 |
 | [QQ 机器人指南](./Documentation/qq_bot_guide.md) | NapCat/权限/审批 |
 | [企业微信指南](./Documentation/wecom_guide.md) | 企业微信推送/机器人模式 |
+| [ACP 模式指南](./Documentation/acp_guide.md) | Agent Client Protocol 编辑器/IDE 集成（JetBrains、Obsidian 等） |
 | [DashBoard 指南](./Documentation/dash_board_guide.md) | 内置 Web 调试界面、追踪数据查看器 |
 | [文档索引](./Documentation/index.md) | 完整文档导航 |
 
@@ -260,6 +273,7 @@ $ARGUMENTS
 - [NapNeko/NapCatQQ](https://github.com/NapNeko/NapCatQQ)
 - [spectreconsole/spectre.console](https://github.com/spectreconsole/spectre.console)
 - [modelcontextprotocol/csharp-sdk](https://github.com/modelcontextprotocol/csharp-sdk)
+- [agentclientprotocol/agent-client-protocol](https://github.com/agentclientprotocol/agent-client-protocol)
 
 ## 📄 许可证
 

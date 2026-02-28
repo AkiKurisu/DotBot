@@ -10,4 +10,6 @@
 
 [企业微信指南](./wecom_guide.md) - 企业微信推送与机器人模式
 
+[ACP 模式指南](./acp_guide.md) - Agent Client Protocol 编辑器/IDE 集成（JetBrains、Obsidian 等）
+
 [DashBoard 调试工具指南](./dash_board_guide.md) - 内置 Web 调试界面、Trace 数据查看

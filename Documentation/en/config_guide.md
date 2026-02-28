@@ -410,6 +410,60 @@ For detailed explanation and Python examples, see [API Mode Guide](./api_guide.m
 
 ---
 
+## ACP Mode Configuration
+
+ACP ([Agent Client Protocol](https://agentclientprotocol.com/)) mode allows DotBot to integrate directly with code editors/IDEs (such as Cursor, VS Code, and other compatible editors) as an AI coding agent. The editor communicates with DotBot via stdio (standard input/output) using the JSON-RPC 2.0 protocol, similar to how LSP (Language Server Protocol) works.
+
+| Config Item | Description | Default |
+|-------------|-------------|---------|
+| `Acp.Enabled` | Enable ACP mode | `false` |
+
+### Enabling ACP Mode
+
+```json
+{
+    "Acp": {
+        "Enabled": true
+    }
+}
+```
+
+### How It Works
+
+When enabled, DotBot communicates via stdin/stdout JSON-RPC messages:
+
+1. **Editor launches DotBot process**: The editor starts DotBot as a subprocess and communicates via stdio
+2. **Initialization handshake**: Both sides exchange protocol versions and capability declarations
+3. **Session management**: The editor creates a session; DotBot broadcasts available slash commands and config options
+4. **Prompt interaction**: The editor sends user messages; DotBot streams back replies, tool call statuses, and results
+5. **Permission requests**: Before executing sensitive operations, DotBot requests user authorization through the protocol
+
+### Supported ACP Protocol Features
+
+| Feature | Description |
+|---------|-------------|
+| `initialize` | Protocol version negotiation and capability exchange |
+| `session/new` | Create a new session |
+| `session/load` | Load an existing session and replay history |
+| `session/list` | List all ACP sessions |
+| `session/prompt` | Send a prompt and receive streaming replies |
+| `session/update` | Agent pushes message chunks, tool call statuses, etc. to the editor |
+| `session/cancel` | Cancel an ongoing operation |
+| `requestPermission` | Agent requests execution permission from the editor |
+| `fs/readTextFile` | Read files through the editor (including unsaved changes) |
+| `fs/writeTextFile` | Write files through the editor (with diff preview) |
+| `terminal/*` | Create and manage terminals through the editor |
+| Slash Commands | Automatically broadcast custom commands to the editor |
+| Config Options | Expose selectable configuration (mode, model, etc.) to the editor |
+
+### Relationship with Other Modes
+
+- ACP mode can run as a standalone mode (higher priority than API mode)
+- In Gateway mode, ACP can run concurrently with QQ Bot, WeCom Bot, and API
+- ACP mode session IDs are prefixed with `acp:`, isolated from other channels
+
+---
+
 ## Cron Scheduled Task Service
 
 Cron is a scheduled task scheduling system supporting one-time and recurring tasks. Tasks are persisted to JSON files and automatically restored after restart.
@@ -866,6 +920,9 @@ When `Gateway.Enabled = false` (the default), behavior is identical to before â€
     "Cron": {
         "Enabled": false,
         "StorePath": "cron/jobs.json"
+    },
+    "Acp": {
+        "Enabled": false
     },
     "DashBoard": {
         "Enabled": false,
