@@ -8,7 +8,7 @@
 
 # DotBot
 
-**DotBot** (.Bot) is a lightweight OpenClaw for .Net that is secure, reliable, and ready to use out of the box.
+**DotBot** (.Bot) is a lightweight .NET AI assistant that connects to editors via ACP and extends tools via MCP, with pluggable Skills & Commands — from editor to CLI to chat bots.
 
 ![banner](./Documentation/images/banner.png)
 
@@ -26,7 +26,8 @@
 
 - 🛠️ **Tool Capabilities**: File read/write (workspace-scoped), controlled Shell commands, Web scraping, optional SubAgent delegation
 - 🔌 **MCP Integration**: Connect external tool services via [Model Context Protocol](https://modelcontextprotocol.io/)
-- 🎮 **Multiple Runtime Modes**: Local REPL, QQ Bot (OneBot V11), WeCom Bot, API Service (OpenAI-compatible), **ACP Editor Integration**, **Gateway multi-channel concurrent mode**
+- 🖥️ **ACP Editor Integration**: Works as a native coding agent inside any [ACP](https://agentclientprotocol.com/)-compatible editor (JetBrains IDEs, Obsidian, and more) via stdio JSON-RPC — no cloud dependency, no lock-in
+- 🎮 **Multiple Runtime Modes**: Local REPL, QQ Bot (OneBot V11), WeCom Bot, API Service (OpenAI-compatible), ACP Editor Integration, **Gateway multi-channel concurrent mode**
 - 📊 **Dashboard**: Built-in Web UI for real-time monitoring of token usage, session history, and tool call traces
 - 🧩 **Skills System**: Dynamically load Skills from workspace
 - 📢 **Notification Push**: WeCom group bot and Webhook notifications
@@ -46,6 +47,14 @@
 ![dashboard](./Documentation/images/dashboard.png)
 
 <div align="center">Dashboard monitors usage and session history</div>
+
+![jetbrain acp](./Documentation/images/jetbrain_acp.png)
+
+<div align="center">ACP mode — JetBrains Rider</div>
+
+![obsidian acp](./Documentation/images/obsidian_acp.png)
+
+<div align="center">ACP mode — Obsidian</div>
 
 ## 🏗️ Architecture
 
@@ -247,7 +256,7 @@ Placeholders: `$ARGUMENTS` expands to the full argument string, `$1`, `$2`, etc.
 | [API Mode Guide](./Documentation/en/api_guide.md) | OpenAI-compatible API, tool filtering, SDK examples |
 | [QQ Bot Guide](./Documentation/en/qq_bot_guide.md) | NapCat / permissions / approval |
 | [WeCom Guide](./Documentation/en/wecom_guide.md) | WeCom push notifications / bot mode |
-| [ACP Mode Guide](./Documentation/en/config_guide.md#acp-mode-configuration) | Agent Client Protocol editor/IDE integration |
+| [ACP Mode Guide](./Documentation/en/acp_guide.md) | Agent Client Protocol editor/IDE integration (JetBrains, Obsidian, and more) |
 | [DashBoard Guide](./Documentation/en/dash_board_guide.md) | Built-in Web debugging UI, Trace data viewer |
 | [Documentation Index](./Documentation/en/index.md) | Full documentation navigation |
 

@@ -8,7 +8,7 @@
 
 # DotBot
 
-**DotBot** (.Bot) 是一个轻量级的 .Net 版 OpenClaw，安全可靠，开箱即用。
+**DotBot** (.Bot) 是基于 .NET 的轻量智能助理，通过 ACP 与 MCP 双协议对接编辑器与外部工具，技能与命令可插拔，覆盖编辑器、CLI 与聊天机器人全场景。
 
 ![banner](./Documentation/images/banner.png)
 
@@ -26,7 +26,8 @@
 
 - 🛠️ **工具能力**: 文件读写（工作区内）、受控 Shell 命令、Web 抓取、可选子智能体（SubAgent）
 - 🔌 **MCP 接入**: 支持通过 [Model Context Protocol](https://modelcontextprotocol.io/) 接入外部工具服务
-- 🎯 **运行形态**: 本地 REPL、QQ 机器人（OneBot V11）、企业微信机器人、API 服务（OpenAI 兼容）、**ACP 编辑器集成**、**Gateway 多 Channel 并发模式**
+- 🖥️ **ACP 编辑器集成**: 通过 stdio JSON-RPC 作为原生编码代理运行在任意 [ACP](https://agentclientprotocol.com/) 兼容编辑器中（JetBrains IDE、Obsidian 等），无需云依赖，无厂商锁定
+- 🎯 **运行形态**: 本地 REPL、QQ 机器人（OneBot V11）、企业微信机器人、API 服务（OpenAI 兼容）、ACP 编辑器集成、**Gateway 多 Channel 并发模式**
 - 📊 **监控面板**: 内置 Web 调试界面，实时监控 Token 使用、会话历史和工具调用追踪
 - 🧩 **技能系统**: 支持动态加载技能
 - 📢 **通知推送**: 企业微信群机器人和 Webhook 推送
@@ -46,6 +47,14 @@
 ![dashboard](./Documentation/images/dashboard.png)
 
 <div align="center">DashBoard 监控用量和会话历史</div>
+
+![jetbrain acp](./Documentation/images/jetbrain_acp.png)
+
+<div align="center">ACP 模式 — JetBrains Rider</div>
+
+![obsidian acp](./Documentation/images/obsidian_acp.png)
+
+<div align="center">ACP 模式 — Obsidian</div>
 
 ## 🏗️ 架构
 
@@ -247,7 +256,7 @@ $ARGUMENTS
 | [API 模式指南](./Documentation/api_guide.md) | OpenAI 兼容 API、工具过滤、SDK 示例 |
 | [QQ 机器人指南](./Documentation/qq_bot_guide.md) | NapCat/权限/审批 |
 | [企业微信指南](./Documentation/wecom_guide.md) | 企业微信推送/机器人模式 |
-| [ACP 模式指南](./Documentation/config_guide.md#acp-模式配置) | Agent Client Protocol 编辑器/IDE 集成 |
+| [ACP 模式指南](./Documentation/acp_guide.md) | Agent Client Protocol 编辑器/IDE 集成（JetBrains、Obsidian 等） |
 | [DashBoard 指南](./Documentation/dash_board_guide.md) | 内置 Web 调试界面、追踪数据查看器 |
 | [文档索引](./Documentation/index.md) | 完整文档导航 |
 
